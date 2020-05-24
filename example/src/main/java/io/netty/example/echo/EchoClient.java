@@ -34,6 +34,7 @@ import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
  * traffic between the echo client and server by sending the first message to
  * the server.
  */
+@SuppressWarnings("Duplicates")
 public final class EchoClient {
 
     static final boolean SSL = System.getProperty("ssl") != null;
@@ -42,41 +43,46 @@ public final class EchoClient {
     static final int SIZE = Integer.parseInt(System.getProperty("size", "256"));
 
     public static void main(String[] args) throws Exception {
-        // Configure SSL.git
+        // 配置 SSL
         final SslContext sslCtx;
         if (SSL) {
             sslCtx = SslContextBuilder.forClient()
-                .trustManager(InsecureTrustManagerFactory.INSTANCE).build();
+                    .trustManager(InsecureTrustManagerFactory.INSTANCE).build();
         } else {
             sslCtx = null;
         }
 
-        // Configure the client.
+        // 创建一个 EventLoopGroup 对象
         EventLoopGroup group = new NioEventLoopGroup();
         try {
+            // 创建 Bootstrap 对象
             Bootstrap b = new Bootstrap();
+            // 设置使用的 EventLoopGroup
             b.group(group)
-             .channel(NioSocketChannel.class)
-             .option(ChannelOption.TCP_NODELAY, true)
-             .handler(new ChannelInitializer<SocketChannel>() {
-                 @Override
-                 public void initChannel(SocketChannel ch) throws Exception {
-                     ChannelPipeline p = ch.pipeline();
-                     if (sslCtx != null) {
-                         p.addLast(sslCtx.newHandler(ch.alloc(), HOST, PORT));
-                     }
-                     //p.addLast(new LoggingHandler(LogLevel.INFO));
-                     p.addLast(new EchoClientHandler());
-                 }
-             });
+                    // 设置要被实例化的 Channel 为 NioSocketChannel 类
+                    .channel(NioSocketChannel.class)
+                    // 设置 NioSocketChannel 的可选项
+                    .option(ChannelOption.TCP_NODELAY, true)
+                    // 设置 NioSocketChannel 的处理器
+                    .handler(new ChannelInitializer<SocketChannel>() {
+                        @Override
+                        public void initChannel(SocketChannel ch) throws Exception {
+                            ChannelPipeline p = ch.pipeline();
+                            if (sslCtx != null) {
+                                p.addLast(sslCtx.newHandler(ch.alloc(), HOST, PORT));
+                            }
+                            //p.addLast(new LoggingHandler(LogLevel.INFO));
+                            p.addLast(new EchoClientHandler());
+                        }
+                    });
 
-            // Start the client.
+            // 连接服务器，并同步等待成功，即启动客户端
             ChannelFuture f = b.connect(HOST, PORT).sync();
 
-            // Wait until the connection is closed.
+            // 监听客户端关闭，并阻塞等待
             f.channel().closeFuture().sync();
         } finally {
-            // Shut down the event loop to terminate all threads.
+            // 优雅关闭一个 EventLoopGroup 对象
             group.shutdownGracefully();
         }
     }

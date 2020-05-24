@@ -38,6 +38,7 @@ public final class EchoServer {
     static final boolean SSL = System.getProperty("ssl") != null;
     static final int PORT = Integer.parseInt(System.getProperty("port", "8007"));
 
+    @SuppressWarnings("Duplicates")
     public static void main(String[] args) throws Exception {
         // Configure SSL.
         final SslContext sslCtx;
@@ -48,35 +49,42 @@ public final class EchoServer {
             sslCtx = null;
         }
 
-        // Configure the server.
-        EventLoopGroup bossGroup = new NioEventLoopGroup(1);//用于服务端接受客户端的连接
-        EventLoopGroup workerGroup = new NioEventLoopGroup();//用于进行客户端的 SocketChannel 的数据读写
+        // 创建两个 EventLoopGroup 对象
+        EventLoopGroup bossGroup = new NioEventLoopGroup(1);// 创建 boss 线程组 用于服务端接受客户端的连接
+        EventLoopGroup workerGroup = new NioEventLoopGroup();// 创建 worker 线程组 用于进行 SocketChannel 的数据读写
+        // 创建 EchoServerHandler 对象
         final EchoServerHandler serverHandler = new EchoServerHandler();
         try {
+            // 创建 ServerBootstrap 对象
             ServerBootstrap b = new ServerBootstrap();
+            // 设置使用的 EventLoopGroup
             b.group(bossGroup, workerGroup)
-             .channel(NioServerSocketChannel.class)
-             .option(ChannelOption.SO_BACKLOG, 100)
-             .handler(new LoggingHandler(LogLevel.INFO))
-             .childHandler(new ChannelInitializer<SocketChannel>() {
-                 @Override
-                 public void initChannel(SocketChannel ch) throws Exception {
-                     ChannelPipeline p = ch.pipeline();
-                     if (sslCtx != null) {
-                         p.addLast(sslCtx.newHandler(ch.alloc()));
-                     }
-                     //p.addLast(new LoggingHandler(LogLevel.INFO));
-                     p.addLast(serverHandler);
-                 }
-             });
+                    // 设置要被实例化的 Channel 为 NioServerSocketChannel
+                    .channel(NioServerSocketChannel.class)
+                    // 设置 NioServerSocketChannel 的可选项
+                    .option(ChannelOption.SO_BACKLOG, 100)
+                    // 设置 NioServerSocketChannel 的处理器
+                    .handler(new LoggingHandler(LogLevel.INFO))
+                    // 设置连入服务端的 Client 的 SocketChannel 的处理器
+                    .childHandler(new ChannelInitializer<SocketChannel>() {
+                        @Override
+                        public void initChannel(SocketChannel ch) throws Exception {
+                            ChannelPipeline p = ch.pipeline();
+                            if (sslCtx != null) {
+                                p.addLast(sslCtx.newHandler(ch.alloc()));
+                            }
+                            //p.addLast(new LoggingHandler(LogLevel.INFO));
+                            p.addLast(serverHandler);
+                        }
+                    });
 
-            // Start the server.
+            // 绑定端口，并同步等待成功，即启动服务端
             ChannelFuture f = b.bind(PORT).sync();
 
-            // Wait until the server socket is closed.
+            // 监听服务端关闭，并阻塞等待
             f.channel().closeFuture().sync();
         } finally {
-            // Shut down all event loops to terminate all threads.
+            // 优雅关闭两个 EventLoopGroup 对象
             bossGroup.shutdownGracefully();
             workerGroup.shutdownGracefully();
         }
