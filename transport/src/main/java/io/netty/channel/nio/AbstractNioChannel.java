@@ -49,8 +49,14 @@ public abstract class AbstractNioChannel extends AbstractChannel {
 
     private static final InternalLogger logger =
             InternalLoggerFactory.getInstance(AbstractNioChannel.class);
-
+    /**
+     * Netty NIO Channel 对象，持有的 Java 原生 NIO 的 Channel 对象。
+     */
     private final SelectableChannel ch;
+    /**
+     * 感兴趣的读事件的操作位值。
+     * AbstractNioMessageChannel 是 SelectionKey.OP_ACCEPT ， 而 AbstractNioByteChannel 是 SelectionKey.OP_READ 。
+     */
     protected final int readInterestOp;
     volatile SelectionKey selectionKey;
     boolean readPending;
@@ -70,19 +76,24 @@ public abstract class AbstractNioChannel extends AbstractChannel {
     private SocketAddress requestedRemoteAddress;
 
     /**
-     * Create a new instance
+     * 构造方法
      *
      * @param parent            the parent {@link Channel} by which this instance was created. May be {@code null}
      * @param ch                the underlying {@link SelectableChannel} on which it operates
      * @param readInterestOp    the ops to set to receive data from the {@link SelectableChannel}
      */
     protected AbstractNioChannel(Channel parent, SelectableChannel ch, int readInterestOp) {
+        // 调用父类 AbstractChannel 的构造方法
         super(parent);
+        // 设置持有的 Java原生 NIO Channel 对象中
         this.ch = ch;
+        // 设置感兴趣的读事件
         this.readInterestOp = readInterestOp;
         try {
+            // 设置 NIO Channel 为非阻塞，这是Java原生 NIO Channel 的API
             ch.configureBlocking(false);
         } catch (IOException e) {
+            // 若发生异常，关闭 NIO Channel ，并抛出异常。
             try {
                 ch.close();
             } catch (IOException e2) {

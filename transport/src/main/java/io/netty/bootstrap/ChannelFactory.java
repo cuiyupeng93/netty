@@ -19,6 +19,9 @@ import io.netty.channel.Channel;
 
 /**
  * @deprecated Use {@link io.netty.channel.ChannelFactory} instead.
+ *
+ * Channel 工厂接口，用于创建 Channel 对象
+ * 注：最初位于 io.netty.bootstrap 包下，后来重构到 io.netty.channel 包下，所以前者使用 @Deprecated 声明，使用后者代替
  */
 @Deprecated
 public interface ChannelFactory<T extends Channel> {

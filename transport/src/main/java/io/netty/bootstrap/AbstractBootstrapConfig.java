@@ -27,12 +27,15 @@ import java.net.SocketAddress;
 import java.util.Map;
 
 /**
- * Exposes the configuration of an {@link AbstractBootstrap}.
+ * 用于获取启动器的配置
+ * 有两个实现类：ServerBootstrapConfig 和 BootstrapConfig
  */
 public abstract class AbstractBootstrapConfig<B extends AbstractBootstrap<B, C>, C extends Channel> {
 
     protected final B bootstrap;
 
+    //构造方法传入的就是一个启动器对象
+    //可以看到下面每个方法都是 直接调用的启动器对象的对应方法，来查询启动器的配置
     protected AbstractBootstrapConfig(B bootstrap) {
         this.bootstrap = ObjectUtil.checkNotNull(bootstrap, "bootstrap");
     }

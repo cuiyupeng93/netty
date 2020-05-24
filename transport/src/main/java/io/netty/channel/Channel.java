@@ -205,6 +205,10 @@ public interface Channel extends AttributeMap, ChannelOutboundInvoker, Comparabl
      *   <li>{@link #deregister(ChannelPromise)}</li>
      *   <li>{@link #voidPromise()}</li>
      * </ul>
+     * 译：Unsafe 操作不允许被用户代码调用。这些函数（如上）是真正用于数据传输操作，必须被IO线程调用。
+     * 注：
+     * 1、Unsafe 不是一个具体的类，而是一个定义在 Channel 接口中的接口。不同的 Channel 类对应不同的 Unsafe 实现类。
+     * 2、对于 NioServerSocketChannel ，Unsafe 的实现类为 NioMessageUnsafe 。
      */
     interface Unsafe {
 

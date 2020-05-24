@@ -49,8 +49,8 @@ public final class EchoServer {
         }
 
         // Configure the server.
-        EventLoopGroup bossGroup = new NioEventLoopGroup(1);
-        EventLoopGroup workerGroup = new NioEventLoopGroup();
+        EventLoopGroup bossGroup = new NioEventLoopGroup(1);//用于服务端接受客户端的连接
+        EventLoopGroup workerGroup = new NioEventLoopGroup();//用于进行客户端的 SocketChannel 的数据读写
         final EchoServerHandler serverHandler = new EchoServerHandler();
         try {
             ServerBootstrap b = new ServerBootstrap();

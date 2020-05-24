@@ -43,9 +43,22 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
 
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(AbstractChannel.class);
 
+    /**
+     * 父 Channel 对象
+     * 对于 NioServerSocketChannel 的 parent 为空。
+     */
     private final Channel parent;
+    /**
+     * Channel 编号
+     */
     private final ChannelId id;
+    /**
+     * Unsafe 对象
+     */
     private final Unsafe unsafe;
+    /**
+     * DefaultChannelPipeline 对象
+     */
     private final DefaultChannelPipeline pipeline;
     private final VoidChannelPromise unsafeVoidPromise = new VoidChannelPromise(this, false);
     private final CloseFuture closeFuture = new CloseFuture(this);
@@ -62,7 +75,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
     private String strVal;
 
     /**
-     * Creates a new instance.
+     * 构造方法
      *
      * @param parent
      *        the parent of this channel. {@code null} if there's no parent.
@@ -75,12 +88,13 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
     }
 
     /**
-     * Creates a new instance.
+     * 构造方法
      *
      * @param parent
      *        the parent of this channel. {@code null} if there's no parent.
      */
     protected AbstractChannel(Channel parent, ChannelId id) {
+
         this.parent = parent;
         this.id = id;
         unsafe = newUnsafe();
