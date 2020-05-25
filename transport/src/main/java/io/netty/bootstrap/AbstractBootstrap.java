@@ -271,14 +271,14 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
      * 绑定本地地址和端口
      */
     private ChannelFuture doBind(final SocketAddress localAddress) {
-        // 初始化并注册一个 Channel 对象，因为注册是异步的过程，所以返回一个 ChannelFuture 对象。
+        // 第一步：初始化并注册一个 Channel 对象，因为注册是异步的过程，所以返回一个 ChannelFuture 对象。
         final ChannelFuture regFuture = initAndRegister();
         final Channel channel = regFuture.channel();
         if (regFuture.cause() != null) {// 若发生异常，直接返回。
             return regFuture;
         }
 
-        // 绑定 Channel 的端口，并注册 Channel 到 SelectionKey 中。
+        // 第二步：绑定 Channel 的端口，并注册 Channel 到 SelectionKey 中。
         // 因为注册是异步的过程，有可能已完成，有可能未完成。所以分成 if-else 分别处理已完成和未完成的情况
         if (regFuture.isDone()) {
             // 已经注册完成
@@ -359,11 +359,20 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
         //         because bind() or connect() will be executed *after* the scheduled registration task is executed
         //         because register(), bind(), and connect() are all bound to the same thread.
 
+        //译：
+        // 如果我们到这里 promise 没有失败，属于下列case之一
+        // 1) 如果我们尝试从事件循环中注册，并且此时已经注册成功
+        //    例如，现在尝试bind()或connect()是安全的，因为通道已经注册了。
+        // 2) 如果我们尝试从另一个线程注册，注册请求已经成功地添加到事件循环的任务队列中，以供以后执行。
+        //    例如，现在尝试bind()或connect()是安全的:
+        //         因为bind()或connect()将在执行计划的注册任务之后执行
+        //         因为register()、bind()和connect()都绑定到同一个线程。
         return regFuture;
     }
 
     abstract void init(Channel channel) throws Exception;
 
+    // 绑定 Channel 的端口，并注册 Channel 到 SelectionKey 中。
     private static void doBind0(
             final ChannelFuture regFuture, final Channel channel,
             final SocketAddress localAddress, final ChannelPromise promise) {
