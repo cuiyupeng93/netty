@@ -36,6 +36,7 @@ public class DefaultThreadFactory implements ThreadFactory {
     protected final ThreadGroup threadGroup;
 
     public DefaultThreadFactory(Class<?> poolType) {
+        // 使用类名作为 poolType
         this(poolType, false, Thread.NORM_PRIORITY);
     }
 

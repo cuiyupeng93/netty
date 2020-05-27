@@ -18,7 +18,14 @@ package io.netty.util.concurrent;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ThreadFactory;
 
+/**
+ * 实现 Executor 接口，每个任务一个线程的执行器实现类
+ */
 public final class ThreadPerTaskExecutor implements Executor {
+
+    /**
+     * 线程工厂对象
+     */
     private final ThreadFactory threadFactory;
 
     public ThreadPerTaskExecutor(ThreadFactory threadFactory) {
@@ -30,6 +37,7 @@ public final class ThreadPerTaskExecutor implements Executor {
 
     @Override
     public void execute(Runnable command) {
+        // 创建一个 Thread ，然后调用 Thread#start() 方法，启动线程执行任务。
         threadFactory.newThread(command).start();
     }
 }
