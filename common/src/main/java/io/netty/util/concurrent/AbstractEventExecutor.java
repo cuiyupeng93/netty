@@ -37,7 +37,13 @@ public abstract class AbstractEventExecutor extends AbstractExecutorService impl
     static final long DEFAULT_SHUTDOWN_QUIET_PERIOD = 2;
     static final long DEFAULT_SHUTDOWN_TIMEOUT = 15;
 
+    /**
+     * 所属 EventExecutorGroup
+     */
     private final EventExecutorGroup parent;
+    /**
+     * EventExecutor 数组。只包含自己，用于 {@link #iterator()}
+     */
     private final Collection<EventExecutor> selfCollection = Collections.<EventExecutor>singleton(this);
 
     protected AbstractEventExecutor() {
@@ -48,16 +54,28 @@ public abstract class AbstractEventExecutor extends AbstractExecutorService impl
         this.parent = parent;
     }
 
+    /**
+     * 获得所属 EventExecutorGroup
+     * @return
+     */
     @Override
     public EventExecutorGroup parent() {
         return parent;
     }
 
+    /**
+     * 获得自己
+     * @return
+     */
     @Override
     public EventExecutor next() {
         return this;
     }
 
+    /**
+     * 判断当前线程是否在 EventLoop 线程中
+     * @return
+     */
     @Override
     public boolean inEventLoop() {
         return inEventLoop(Thread.currentThread());
@@ -100,13 +118,27 @@ public abstract class AbstractEventExecutor extends AbstractExecutorService impl
         return new DefaultProgressivePromise<V>(this);
     }
 
+    /**
+     * 创建成功结果
+     * @param result
+     * @param <V>
+     * @return
+     */
     @Override
     public <V> Future<V> newSucceededFuture(V result) {
+        // 创建的 Future 对象，会传入自身作为 EventExecutor ，并传入 result 或 cause 分别作为成功结果和异常。
         return new SucceededFuture<V>(this, result);
     }
 
+    /**
+     * 创建失败结果
+     * @param cause
+     * @param <V>
+     * @return
+     */
     @Override
     public <V> Future<V> newFailedFuture(Throwable cause) {
+        // 创建的 Future 对象，会传入自身作为 EventExecutor ，并传入 result 或 cause 分别作为成功结果和异常。
         return new FailedFuture<V>(this, cause);
     }
 
