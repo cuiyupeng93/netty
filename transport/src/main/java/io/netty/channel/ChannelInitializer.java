@@ -26,8 +26,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * A special {@link ChannelInboundHandler} which offers an easy way to initialize a {@link Channel} once it was
- * registered to its {@link EventLoop}.
+ * 一个特殊的{@link ChannelInboundHandler}，它提供了一种简单的方法来初始化一个注册到它的{@link EventLoop}的{@link Channel}。
  *
  * Implementations are most often used in the context of {@link Bootstrap#handler(ChannelHandler)} ,
  * {@link ServerBootstrap#handler(ChannelHandler)} and {@link ServerBootstrap#childHandler(ChannelHandler)} to
@@ -46,7 +45,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * bootstrap.childHandler(new MyChannelInitializer());
  * ...
  * </pre>
+ *
  * Be aware that this class is marked as {@link Sharable} and so the implementation must be safe to be re-used.
+ * 请注意，这个类被标记为{@link Sharable}，因此它的实现类 必须是安全的才能被重用。
  *
  * @param <C>   A sub-type of {@link Channel}
  */
@@ -56,14 +57,17 @@ public abstract class ChannelInitializer<C extends Channel> extends ChannelInbou
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(ChannelInitializer.class);
     // We use a Set as a ChannelInitializer is usually shared between all Channels in a Bootstrap /
     // ServerBootstrap. This way we can reduce the memory usage compared to use Attributes.
+    // 译：我们使用一个集合作为通道初始化器，它通常在Bootstrap / ServerBootstrap中的所有通道之间共享。这样，与使用属性相比，我们可以减少内存的使用。
     private final Set<ChannelHandlerContext> initMap = Collections.newSetFromMap(
             new ConcurrentHashMap<ChannelHandlerContext, Boolean>());
 
     /**
+     * 译：一旦 {@link Channel} 被注册，这个方法将会被调用。方法返回后，这个实例将从{@link Channel}的{@link ChannelPipeline}中删除。
+     *
      * This method will be called once the {@link Channel} was registered. After the method returns this instance
      * will be removed from the {@link ChannelPipeline} of the {@link Channel}.
      *
-     * @param ch            the {@link Channel} which was registered.
+     * @param ch            被注册的 channel
      * @throws Exception    is thrown if an error occurs. In that case it will be handled by
      *                      {@link #exceptionCaught(ChannelHandlerContext, Throwable)} which will by default close
      *                      the {@link Channel}.

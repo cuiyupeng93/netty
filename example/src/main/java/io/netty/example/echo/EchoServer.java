@@ -50,22 +50,25 @@ public final class EchoServer {
         }
 
         // 创建两个 EventLoopGroup 对象
-        EventLoopGroup bossGroup = new NioEventLoopGroup(1);// 创建 boss 线程组 用于服务端接受客户端的连接
-        EventLoopGroup workerGroup = new NioEventLoopGroup();// 创建 worker 线程组 用于进行 SocketChannel 的数据读写
+        EventLoopGroup bossGroup = new NioEventLoopGroup(1);// 创建 bossGroup，用于处理客户端的连接请求 用于服务端接受客户端的连接
+        EventLoopGroup workerGroup = new NioEventLoopGroup();// 创建 workerGroup，用于处理与各个客户端连接的IO操作
         // 创建 EchoServerHandler 对象
         final EchoServerHandler serverHandler = new EchoServerHandler();
+
+
         try {
-            // 创建 ServerBootstrap 对象
+            // 步骤1：创建 ServerBootstrap 对象
             ServerBootstrap b = new ServerBootstrap();
-            // 设置使用的 EventLoopGroup
+            // 步骤2：设置并绑定 Reactor 线程池 即EventLoopGroup。
             b.group(bossGroup, workerGroup)
-                    // 设置要被实例化的 Channel 为 NioServerSocketChannel
+                    // 步骤3：设置并绑定服务端 channel，这里选择 NioServerSocketChannel
                     .channel(NioServerSocketChannel.class)
-                    // 设置 NioServerSocketChannel 的可选项
+                    // 步骤4：设置 NioServerSocketChannel 的可选项。
+                    // 这里的 SO_BACKLOG 是 TCP的参数，指定了内核为此套接字排队的最大连接数 详细可见《Netty 权威指南》P265
                     .option(ChannelOption.SO_BACKLOG, 100)
-                    // 设置 NioServerSocketChannel 的处理器
+                    // todo qa 2020-06-06 步骤5：为该启动器的父类设置 Handler ？？ 设置 NioServerSocketChannel 的处理器？？
                     .handler(new LoggingHandler(LogLevel.INFO))
-                    // 设置连入服务端的 Client 的 SocketChannel 的处理器
+                    // todo qa 2020-06-06 设置连入服务端的 Client 的 SocketChannel 的处理器 ？？
                     .childHandler(new ChannelInitializer<SocketChannel>() {
                         @Override
                         public void initChannel(SocketChannel ch) throws Exception {
@@ -78,7 +81,7 @@ public final class EchoServer {
                         }
                     });
 
-            // 绑定端口，并同步等待成功，即启动服务端
+            // 绑定端口，并同步等待成功，即启动服务端。这一步会经过创建 channel，初始化 channel，注册 channel 到 EventLoop 等步骤
             ChannelFuture f = b.bind(PORT).sync();
 
             // 监听服务端关闭，并阻塞等待

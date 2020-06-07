@@ -70,11 +70,14 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
     }
 
     /**
-     * Set the {@link EventLoopGroup} for the parent (acceptor) and the child (client). These
-     * {@link EventLoopGroup}'s are used to handle all the events and IO for {@link ServerChannel} and
-     * {@link Channel}'s.
+     * 设置并绑定 Reactor 线程池
+     * 注：并不是必须要创建两个不同的 EventLoopGroup，也可以只创建一个并共享，即 parentGroup 和 childGroup 传入相同对象
+     *
+     * @param parentGroup 父 EventLoopGroup 是 acceptor 线程池，用于接收客户端的连接
+     * @param childGroup 子 EventLoopGroup 是 client 线程池，用于处理客户端 IO 事件
      */
     public ServerBootstrap group(EventLoopGroup parentGroup, EventLoopGroup childGroup) {
+        // parentGroup 传入父类 AbstractBootstrap 的构造函数中
         super.group(parentGroup);
         ObjectUtil.checkNotNull(childGroup, "childGroup");
         if (this.childGroup != null) {
@@ -121,28 +124,46 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
         return this;
     }
 
+    /**
+     * cui：到此步时 channel 刚被创建出来
+     * @param channel
+     */
     @Override
     void init(Channel channel) {
+        // 将启动器配置的可选项集合，配置到当前 channel 的可选项集合
         setChannelOptions(channel, options0().entrySet().toArray(newOptionArray(0)), logger);
+
+        // 将启动器配置的属性集合，配置到当前 channel 的属性集合
         setAttributes(channel, attrs0().entrySet().toArray(newAttrArray(0)));
 
         ChannelPipeline p = channel.pipeline();
 
+        // 记录当前的属性
         final EventLoopGroup currentChildGroup = childGroup;
         final ChannelHandler currentChildHandler = childHandler;
         final Entry<ChannelOption<?>, Object>[] currentChildOptions =
                 childOptions.entrySet().toArray(newOptionArray(0));
         final Entry<AttributeKey<?>, Object>[] currentChildAttrs = childAttrs.entrySet().toArray(newAttrArray(0));
 
+        // 添加 ChannelInitializer 对象到 pipeline 中，用于后续初始化 ChannelHandler 到 pipeline 中。
+        // 该 ChannelInitializer 的初始化的执行，在 AbstractChannel#register0(ChannelPromise promise) 方法中触发执行。
+        // todo qa 2020-06-05 ChannelInitializer 是什么？
+        // ChannelInitializer 是一个特殊的{@link ChannelInboundHandler}，它提供了一种简单的方法来初始化一个注册到它的{@link EventLoop}的{@link Channel}。
+        // todo qa 2020-06-05 为什么要使用它向 pipeline 里添加 ChannelHandler 呢？
         p.addLast(new ChannelInitializer<Channel>() {
             @Override
             public void initChannel(final Channel ch) {
                 final ChannelPipeline pipeline = ch.pipeline();
+
+                // 添加启动器配置的 ChannelHandler 到 pipeline 中
                 ChannelHandler handler = config.handler();
                 if (handler != null) {
                     pipeline.addLast(handler);
                 }
 
+                // todo qa 2020-06-05 这一步没看懂？？？
+                // 添加 ServerBootstrapAcceptor 到 pipeline 中。
+                // 使用 EventLoop 执行的原因，参见 https://github.com/lightningMan/netty/commit/4638df20628a8987c8709f0f8e5f3679a914ce1a
                 ch.eventLoop().execute(new Runnable() {
                     @Override
                     public void run() {

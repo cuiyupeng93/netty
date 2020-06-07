@@ -344,6 +344,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
 
     /**
      * Create a new {@link AbstractUnsafe} instance which will be used for the life-time of the {@link Channel}
+     * 具体
      */
     protected abstract AbstractUnsafe newUnsafe();
 
@@ -477,12 +478,14 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 return;
             }
 
+            // 把 eventLoop 赋值给了 channel，这里的eventLoop 通过前面的分析，应当是NioEventLoop
             AbstractChannel.this.eventLoop = eventLoop;
 
             if (eventLoop.inEventLoop()) {
                 register0(promise);
             } else {
                 try {
+                    // 下一步调用 register0
                     eventLoop.execute(new Runnable() {
                         @Override
                         public void run() {
@@ -508,6 +511,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                     return;
                 }
                 boolean firstRegistration = neverRegistered;
+                // 下一步调用 io.netty.channel.nio.AbstractNioChannel.doRegister
                 doRegister();
                 neverRegistered = false;
                 registered = true;

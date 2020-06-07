@@ -85,6 +85,10 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
         // Disallow extending from a different package.
     }
 
+    /**
+     * 构造方法
+     * @param bootstrap
+     */
     AbstractBootstrap(AbstractBootstrap<B, C> bootstrap) {
         group = bootstrap.group;
         channelFactory = bootstrap.channelFactory;
@@ -235,7 +239,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     }
 
     /**
-     * 创建一个 Channel， 并且绑定地址和端口
+     * 创建一个 Channel，绑定端口
      * 有多个重载方法
      * 返回值是 ChannelFuture 对象，也就是异步的绑定端口，启动服务端。如果需要同步，则需要调用 ChannelFuture#sync() 方法。
      */
@@ -268,7 +272,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     }
 
     /**
-     * 绑定本地地址和端口
+     * ★★★ 绑定本地地址和端口
      */
     private ChannelFuture doBind(final SocketAddress localAddress) {
         // 第一步：初始化并注册一个 Channel 对象，因为注册是异步的过程，所以返回一个 ChannelFuture 对象。
@@ -281,15 +285,13 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
         // 第二步：绑定 Channel 的端口，并注册 Channel 到 SelectionKey 中。
         // 因为注册是异步的过程，有可能已完成，有可能未完成。所以分成 if-else 分别处理已完成和未完成的情况
         if (regFuture.isDone()) {
-            // 已经注册完成
-            // At this point we know that the registration was complete and successful.
+            // 到此步已经注册完成
             ChannelPromise promise = channel.newPromise();
             // doBind0 是核心的代码，用于绑定 Channel 的端口，并注册 Channel 到 SelectionKey 中。
             doBind0(regFuture, channel, localAddress, promise);
             return promise;
         } else {
-            // 注册还未完成
-            // Registration future is almost always fulfilled already, but just in case it's not.
+            // 注册虽然通常都会成功，但也要以防万一
             final PendingRegistrationPromise promise = new PendingRegistrationPromise(channel);
             // 添加监听器，在注册完成后，进行回调执行 doBind0
             regFuture.addListener(new ChannelFutureListener() {
@@ -315,14 +317,19 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     }
 
     /**
-     * 初始化并注册一个 Channel 对象。
+     * ★★★ 初始化并注册一个 Channel 对象。
      * 是异步注册
      * @return 返回一个 ChannelFuture
      */
     final ChannelFuture initAndRegister() {
         Channel channel = null;
         try {
-            // 创建 Channel 对象
+            // 通过反射创建 Channel 对象
+            // todo qa 2020-06-05 Channel 是如何创建的，以 NioServerSocketChannel 的创建为例？
+            //  ==》可以打开 NioServerSocketChannel 源码（或NioSocketChannel），
+            //  从无参构造开始看起（因为 ReflectiveChannelFactory.newChannel 中就是通过反射调用的 channel 的无参构造）
+            // 注：channelFactory 是在调用 channel 方法后创建了一个 ReflectiveChannelFactory，
+            // 示例可见 EchoServer 的 b.channel(NioServerSocketChannel.class)
             channel = channelFactory.newChannel();
             // 初始化 Channel 配置
             init(channel);
@@ -339,6 +346,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
         }
 
         // 注册 Channel 到 EventLoopGroup 中（实际在方法内部，EventLoopGroup 会分配一个 EventLoop 对象，将 Channel 注册到其上。）
+        // 下一步需要跟到 MultithreadEventLoopGroup
         ChannelFuture regFuture = config().group().register(channel);
         if (regFuture.cause() != null) {
             if (channel.isRegistered()) {
@@ -370,6 +378,11 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
         return regFuture;
     }
 
+    /**
+     * 初始化 Channel 配置，由子类实现
+     * @param channel
+     * @throws Exception
+     */
     abstract void init(Channel channel) throws Exception;
 
     // 绑定 Channel 的端口，并注册 Channel 到 SelectionKey 中。

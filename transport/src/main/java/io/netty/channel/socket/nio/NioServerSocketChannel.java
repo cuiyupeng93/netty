@@ -68,6 +68,7 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
              *
              *  See <a href="https://github.com/netty/netty/issues/2308">#2308</a>.
              */
+            // 效果等同于 Java NIO 中的 ServerSocketChannel#open()
             return provider.openServerSocketChannel();
         } catch (IOException e) {
             throw new ChannelException(
@@ -82,14 +83,13 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
     private final ServerSocketChannelConfig config;
 
     /**
-     * 构造方法
+     * 无参构造方法
      */
     public NioServerSocketChannel() {
         this(newSocket(DEFAULT_SELECTOR_PROVIDER));
     }
 
     /**
-     * Create a new instance using the given {@link SelectorProvider}.
      * 构造方法
      */
     public NioServerSocketChannel(SelectorProvider provider) {
@@ -98,9 +98,10 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
 
     /**
      * 最终的构造方法
+     * 传入的是 Java NIO 中的 ServerSocketChannel 对象
      */
     public NioServerSocketChannel(ServerSocketChannel channel) {
-        // 调用父 AbstractNioMessageChannel 的构造方法。注意传入的 SelectionKey 的值为 OP_ACCEPT 。
+        // 调用父 AbstractNioMessageChannel 的构造方法。注意传入的 SelectionKey 的值为 OP_ACCEPT 。表示这个 ServerSocketChannel 感兴趣的事件是：连接就绪
         super(null, channel, SelectionKey.OP_ACCEPT);
         // 创建 NioServerSocketChannelConfig 对象
         config = new NioServerSocketChannelConfig(this, javaChannel().socket());

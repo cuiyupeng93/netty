@@ -364,6 +364,7 @@ public interface ChannelPipeline
 
     /**
      * Inserts {@link ChannelHandler}s at the last position of this pipeline.
+     * 译：在这个 pipeline 的末尾插入 ChannelHandler
      *
      * @param handlers  the handlers to insert last
      *
