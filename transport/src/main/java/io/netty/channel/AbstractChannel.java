@@ -481,11 +481,14 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
             // 把 eventLoop 赋值给了 channel，这里的eventLoop 通过前面的分析，应当是NioEventLoop
             AbstractChannel.this.eventLoop = eventLoop;
 
+            // 判断当前channel绑定的eventLoop的线程是否已经启动
+            // 如果是从 ServerBootstrap#bind 方法过来的，肯定是false
             if (eventLoop.inEventLoop()) {
+                // register0 方法：将真正的javaChannel，注册到selector上
                 register0(promise);
             } else {
                 try {
-                    // 下一步调用 register0
+                    // eventLoop.execute：如果这时候eventLoop还没有启动，启动它上面的线程，启动后这个eventLoop就开始轮询事件了
                     eventLoop.execute(new Runnable() {
                         @Override
                         public void run() {
@@ -505,12 +508,12 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
 
         private void register0(ChannelPromise promise) {
             try {
-                // check if the channel is still open as it could be closed in the mean time when the register
-                // call was outside of the eventLoop
+                // 检查通道是否仍处于打开状态，因为它可能在寄存器调用处于eventLoop之外时关闭
                 if (!promise.setUncancellable() || !ensureOpen(promise)) {
                     return;
                 }
                 boolean firstRegistration = neverRegistered;
+                // 这一步将 javaChannel 注册到 Selector 上
                 // 下一步调用 io.netty.channel.nio.AbstractNioChannel.doRegister
                 doRegister();
                 neverRegistered = false;
@@ -526,11 +529,10 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 // multiple channel actives if the channel is deregistered and re-registered.
                 if (isActive()) {
                     if (firstRegistration) {
+                        // todo qa 2020-11-09 激活channel？
                         pipeline.fireChannelActive();
                     } else if (config().isAutoRead()) {
-                        // This channel was registered before and autoRead() is set. This means we need to begin read
-                        // again so that we process inbound data.
-                        //
+                        // 此通道在之前注册，并且设置了autoRead（）。这意味着我们需要重新开始读取，以便处理入站数据。
                         // See https://github.com/netty/netty/issues/4805
                         beginRead();
                     }

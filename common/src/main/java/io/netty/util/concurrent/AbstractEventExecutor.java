@@ -73,7 +73,8 @@ public abstract class AbstractEventExecutor extends AbstractExecutorService impl
     }
 
     /**
-     * 判断当前线程是否在 EventLoop 线程中
+     * 判断当前线程是否已经启动了
+     * 如果启动了，那么 eventLoop#thread 就有值，且等于当前线程（因为这个方法只有 eventLoop绑定的那个线程会调用它）
      * @return
      */
     @Override

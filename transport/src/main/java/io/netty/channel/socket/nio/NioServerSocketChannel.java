@@ -62,12 +62,6 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
      */
     private static ServerSocketChannel newSocket(SelectorProvider provider) {
         try {
-            /**
-             *  Use the {@link SelectorProvider} to open {@link SocketChannel} and so remove condition in
-             *  {@link SelectorProvider#provider()} which is called by each ServerSocketChannel.open() otherwise.
-             *
-             *  See <a href="https://github.com/netty/netty/issues/2308">#2308</a>.
-             */
             // 效果等同于 Java NIO 中的 ServerSocketChannel#open()
             return provider.openServerSocketChannel();
         } catch (IOException e) {
@@ -161,10 +155,12 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
 
     @Override
     protected int doReadMessages(List<Object> buf) throws Exception {
+        // 接收客户端的连接，ch 就是 Java 原生的 SocketChannel
         SocketChannel ch = SocketUtils.accept(javaChannel());
 
         try {
             if (ch != null) {
+                // 创建代表客户端的 NioSocketChannel，parent 就是 服务端的NioServerSocketChannel
                 buf.add(new NioSocketChannel(this, ch));
                 return 1;
             }

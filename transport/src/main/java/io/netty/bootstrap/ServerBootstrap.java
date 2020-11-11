@@ -146,22 +146,15 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
         final Entry<AttributeKey<?>, Object>[] currentChildAttrs = childAttrs.entrySet().toArray(newAttrArray(0));
 
         // 添加 ChannelInitializer 对象到 pipeline 中，用于后续初始化 ChannelHandler 到 pipeline 中。
-        // 该 ChannelInitializer 的初始化的执行，在 AbstractChannel#register0(ChannelPromise promise) 方法中触发执行。
-        // todo qa 2020-06-05 ChannelInitializer 是什么？
-        // ChannelInitializer 是一个特殊的{@link ChannelInboundHandler}，它提供了一种简单的方法来初始化一个注册到它的{@link EventLoop}的{@link Channel}。
-        // todo qa 2020-06-05 为什么要使用它向 pipeline 里添加 ChannelHandler 呢？
         p.addLast(new ChannelInitializer<Channel>() {
             @Override
             public void initChannel(final Channel ch) {
                 final ChannelPipeline pipeline = ch.pipeline();
-
                 // 添加启动器配置的 ChannelHandler 到 pipeline 中
                 ChannelHandler handler = config.handler();
                 if (handler != null) {
                     pipeline.addLast(handler);
                 }
-
-                // todo qa 2020-06-05 这一步没看懂？？？
                 // 添加 ServerBootstrapAcceptor 到 pipeline 中。
                 // 使用 EventLoop 执行的原因，参见 https://github.com/lightningMan/netty/commit/4638df20628a8987c8709f0f8e5f3679a914ce1a
                 ch.eventLoop().execute(new Runnable() {
@@ -220,10 +213,13 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
         @Override
         @SuppressWarnings("unchecked")
         public void channelRead(ChannelHandlerContext ctx, Object msg) {
+            // child 代表客户端channel
             final Channel child = (Channel) msg;
 
+            // 将设置的 childHandler 添加到 客户端的pipeline
             child.pipeline().addLast(childHandler);
 
+            // options、attrs 也加进去
             setChannelOptions(child, childOptions, logger);
             setAttributes(child, childAttrs);
 

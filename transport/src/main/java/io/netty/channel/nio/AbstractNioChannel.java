@@ -385,7 +385,7 @@ public abstract class AbstractNioChannel extends AbstractChannel {
 
     /**
      * 最终的注册
-     * 将 channel 注册到 selector上
+     * 将 javaChannel 注册到 selector上
      * @throws Exception
      */
     @Override
@@ -393,7 +393,7 @@ public abstract class AbstractNioChannel extends AbstractChannel {
         boolean selected = false;
         for (;;) {
             try {
-                // 将 channel 注册到 java NIO 的 Selector
+                // 将 javaChannel 注册到 Selector 上
                 selectionKey = javaChannel().register(eventLoop().unwrappedSelector(), 0, this);
                 return;
             } catch (CancelledKeyException e) {

@@ -64,6 +64,7 @@ public class DefaultThreadFactory implements ThreadFactory {
         this(toPoolName(poolType), daemon, priority);
     }
 
+    // 根据类类型(class) 获取类名 并且将首字母转为小写
     public static String toPoolName(Class<?> poolType) {
         if (poolType == null) {
             throw new NullPointerException("poolType");
@@ -85,6 +86,11 @@ public class DefaultThreadFactory implements ThreadFactory {
     }
 
     public DefaultThreadFactory(String poolName, boolean daemon, int priority, ThreadGroup threadGroup) {
+        // 走到这里，各个参数的值为
+        // poolName：nioEventLoopGroup
+        // daemon：false 不是守护线程
+        // priority： 10 最大优先级
+        // threadGroup：线程组
         if (poolName == null) {
             throw new NullPointerException("poolName");
         }
@@ -93,6 +99,7 @@ public class DefaultThreadFactory implements ThreadFactory {
                     "priority: " + priority + " (expected: Thread.MIN_PRIORITY <= priority <= Thread.MAX_PRIORITY)");
         }
 
+        // 生成线程的前缀，使用原子计数器自增
         prefix = poolName + '-' + poolId.incrementAndGet() + '-';
         this.daemon = daemon;
         this.priority = priority;

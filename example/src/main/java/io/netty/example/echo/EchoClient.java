@@ -16,11 +16,7 @@
 package io.netty.example.echo;
 
 import io.netty.bootstrap.Bootstrap;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelInitializer;
-import io.netty.channel.ChannelOption;
-import io.netty.channel.ChannelPipeline;
-import io.netty.channel.EventLoopGroup;
+import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
@@ -52,18 +48,12 @@ public final class EchoClient {
             sslCtx = null;
         }
 
-        // 创建一个 EventLoopGroup 对象
         EventLoopGroup group = new NioEventLoopGroup();
         try {
-            // 创建 Bootstrap 对象
             Bootstrap b = new Bootstrap();
-            // 设置使用的 EventLoopGroup
             b.group(group)
-                    // 设置要被实例化的 Channel 为 NioSocketChannel 类
                     .channel(NioSocketChannel.class)
-                    // 设置 NioSocketChannel 的可选项
                     .option(ChannelOption.TCP_NODELAY, true)
-                    // 设置 NioSocketChannel 的处理器
                     .handler(new ChannelInitializer<SocketChannel>() {
                         @Override
                         public void initChannel(SocketChannel ch) throws Exception {
@@ -71,15 +61,11 @@ public final class EchoClient {
                             if (sslCtx != null) {
                                 p.addLast(sslCtx.newHandler(ch.alloc(), HOST, PORT));
                             }
-                            //p.addLast(new LoggingHandler(LogLevel.INFO));
                             p.addLast(new EchoClientHandler());
                         }
                     });
 
-            // 连接服务器，并同步等待成功，即启动客户端
             ChannelFuture f = b.connect(HOST, PORT).sync();
-
-            // 监听客户端关闭，并阻塞等待
             f.channel().closeFuture().sync();
         } finally {
             // 优雅关闭一个 EventLoopGroup 对象

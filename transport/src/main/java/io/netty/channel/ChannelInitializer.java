@@ -62,12 +62,10 @@ public abstract class ChannelInitializer<C extends Channel> extends ChannelInbou
             new ConcurrentHashMap<ChannelHandlerContext, Boolean>());
 
     /**
-     * 译：一旦 {@link Channel} 被注册，这个方法将会被调用。方法返回后，这个实例将从{@link Channel}的{@link ChannelPipeline}中删除。
-     *
      * This method will be called once the {@link Channel} was registered. After the method returns this instance
      * will be removed from the {@link ChannelPipeline} of the {@link Channel}.
      *
-     * @param ch            被注册的 channel
+     * @param ch
      * @throws Exception    is thrown if an error occurs. In that case it will be handled by
      *                      {@link #exceptionCaught(ChannelHandlerContext, Throwable)} which will by default close
      *                      the {@link Channel}.

@@ -374,6 +374,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
     private void invokeChannelRead(Object msg) {
         if (invokeHandler()) {
             try {
+                // 走这里，这时候会调用 ServerBootstrapAcceptor#channelRead
                 ((ChannelInboundHandler) handler()).channelRead(this, msg);
             } catch (Throwable t) {
                 notifyHandlerException(t);
@@ -964,6 +965,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
         // We must call setAddComplete before calling handlerAdded. Otherwise if the handlerAdded method generates
         // any pipeline events ctx.handler() will miss them because the state will not allow it.
         if (setAddComplete()) {
+            // 这里 handler() 方法获取的是 ServerBootstrap 中添加的匿名类，ChannelInitializer。这时候调用 ChannelInitializer#handlerAdded 方法
             handler().handlerAdded(this);
         }
     }

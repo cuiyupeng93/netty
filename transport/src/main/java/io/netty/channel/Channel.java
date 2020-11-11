@@ -210,7 +210,6 @@ public interface Channel extends AttributeMap, ChannelOutboundInvoker, Comparabl
      * 1、Unsafe 不是一个具体的类，而是一个定义在 Channel 接口中的接口。不同的 Channel 类对应不同的 Unsafe 实现类。
      * 2、对于 NioServerSocketChannel ，Unsafe 的实现类为 NioMessageUnsafe 。
      */
-    // todo qa 2020-06-06 对于 Unsafe 还不太了解。
     interface Unsafe {
 
         /**

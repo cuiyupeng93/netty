@@ -649,8 +649,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         assert channel.eventLoop().inEventLoop();
         if (firstRegistration) {
             firstRegistration = false;
-            // We are now registered to the EventLoop. It's time to call the callbacks for the ChannelHandlers,
-            // that were added before the registration was done.
+            // 我们现在注册到EventLoop。现在是调用ChannelHandlers的回调的时候了，这些回调是在注册完成之前添加的。
             callHandlerAddedForAllHandlers();
         }
     }
@@ -928,6 +927,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
 
     @Override
     public final ChannelPipeline fireChannelRead(Object msg) {
+        // 在接入新连接时，时 NioSocketChannel
         AbstractChannelHandlerContext.invokeChannelRead(head, msg);
         return this;
     }

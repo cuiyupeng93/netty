@@ -89,12 +89,14 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
             throw new IllegalArgumentException(String.format("nThreads: %d (expected: > 0)", nThreads));
         }
 
-        // 创建执行器
+        // 创建线程池 executor，这个线程池是后边给 eventLoop 使用的, eventLoop 第一次提交任务时，会发现还没有绑定线程，所以会绑定到这个线程池创建出来的线程上
+        // 看名字可以发现，这是每个任务都会开启一个线程的线程池。
+        // 由于是从子类调用过来的，所以newDefaultThreadFactory方法会走到子类重写的方法中
         if (executor == null) {
             executor = new ThreadPerTaskExecutor(newDefaultThreadFactory());
         }
 
-        // 创建 EventExecutor (事件执行器)数组
+        // 创建事件执行器数组
         children = new EventExecutor[nThreads];
 
         for (int i = 0; i < nThreads; i ++) {
@@ -104,8 +106,6 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
                 children[i] = newChild(executor, args);
                 success = true;
             } catch (Exception e) {
-                // 创建失败，抛出 IllegalStateException 异常
-                // TODO: Think about if this is a good exception type
                 throw new IllegalStateException("failed to create a child event loop", e);
             } finally {
                 // 创建失败，关闭所有已创建的 EventExecutor

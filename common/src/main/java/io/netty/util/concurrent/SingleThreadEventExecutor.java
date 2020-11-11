@@ -459,25 +459,30 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
     }
 
     /**
-     * Poll all tasks from the task queue and run them via {@link Runnable#run()} method.  This method stops running
-     * the tasks in the task queue and returns if it ran longer than {@code timeoutNanos}.
+     * 轮询任务队列中的所有任务并执行它们，如果运行时间超出timeoutNanos，则方法返回
      */
     protected boolean runAllTasks(long timeoutNanos) {
+        // 从scheduledTaskQueue转移定时任务到taskQueue
         fetchFromScheduledTaskQueue();
         Runnable task = pollTask();
         if (task == null) {
+            // 尝试在获取一次  如果有就执行
             afterRunningAllTasks();
             return false;
         }
 
+        // 计算本次任务循环的截止时间
         final long deadline = ScheduledFutureTask.nanoTime() + timeoutNanos;
         long runTasks = 0;
         long lastExecutionTime;
+        // 循环执行任务
         for (;;) {
+            // 通过调用这些任务的run方法执行它们
             safeExecute(task);
 
             runTasks ++;
 
+            // 每64个任务检查一次超时（因为nanoTime（）比较耗时），超出deadline时间就退出循环
             // Check timeout every 64 tasks because nanoTime() is relatively expensive.
             // XXX: Hard-coded value - will make it configurable if it is really a problem.
             if ((runTasks & 0x3F) == 0) {
@@ -487,6 +492,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
                 }
             }
 
+            // 拉不到任务了就退出循环
             task = pollTask();
             if (task == null) {
                 lastExecutionTime = ScheduledFutureTask.nanoTime();
@@ -838,6 +844,8 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
     private void execute(Runnable task, boolean immediate) {
         boolean inEventLoop = inEventLoop();
         addTask(task);
+        // inEventLoop 方法用于判断该 eventLoop 是否已经启动起来，如果没启动，则提交一个 startThread 的任务
+        // 这个任务就会启动一个线程并绑定到这个 eventLoop 上， 然后在调用 eventLoop#run，开始事件循环
         if (!inEventLoop) {
             startThread();
             if (isShutdown()) {
@@ -990,6 +998,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         executor.execute(new Runnable() {
             @Override
             public void run() {
+                // 当前线程绑定到eventLoop#thread
                 thread = Thread.currentThread();
                 if (interrupted) {
                     thread.interrupt();
@@ -998,6 +1007,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
                 boolean success = false;
                 updateLastExecutionTime();
                 try {
+                    // 开始轮询事件
                     SingleThreadEventExecutor.this.run();
                     success = true;
                 } catch (Throwable t) {

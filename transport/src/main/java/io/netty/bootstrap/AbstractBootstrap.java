@@ -325,11 +325,6 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
         Channel channel = null;
         try {
             // 通过反射创建 Channel 对象
-            // todo qa 2020-06-05 Channel 是如何创建的，以 NioServerSocketChannel 的创建为例？
-            //  ==》可以打开 NioServerSocketChannel 源码（或NioSocketChannel），
-            //  从无参构造开始看起（因为 ReflectiveChannelFactory.newChannel 中就是通过反射调用的 channel 的无参构造）
-            // 注：channelFactory 是在调用 channel 方法后创建了一个 ReflectiveChannelFactory，
-            // 示例可见 EchoServer 的 b.channel(NioServerSocketChannel.class)
             channel = channelFactory.newChannel();
             // 初始化 Channel 配置
             init(channel);
@@ -345,8 +340,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
             return new DefaultChannelPromise(new FailedChannel(), GlobalEventExecutor.INSTANCE).setFailure(t);
         }
 
-        // 注册 Channel 到 EventLoopGroup 中（实际在方法内部，EventLoopGroup 会分配一个 EventLoop 对象，将 Channel 注册到其上。）
-        // 下一步需要跟到 MultithreadEventLoopGroup
+        // 注册 Channel 到 EventLoopGroup 中的一个 eventLoop上
         ChannelFuture regFuture = config().group().register(channel);
         if (regFuture.cause() != null) {
             if (channel.isRegistered()) {

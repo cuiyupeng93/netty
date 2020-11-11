@@ -345,10 +345,10 @@ public final class NioEventLoop extends SingleThreadEventLoop {
     }
 
     /**
-     * Sets the percentage of the desired amount of time spent for I/O in the event loop. Value range from 1-100.
-     * The default value is {@code 50}, which means the event loop will try to spend the same amount of time for I/O
-     * as for non-I/O tasks. The lower the number the more time can be spent on non-I/O tasks. If value set to
-     * {@code 100}, this feature will be disabled and event loop will not attempt to balance I/O and non-I/O tasks.
+     * 设置在事件循环中用于I/O任务的时间比例，取值范围1-100
+     * 默认值是{@code50}，这意味着事件循环将尝试在I/O和非I/O任务上花费相同的时间。
+     * 数字越低，用于非I/O任务的时间就越多。
+     * 如果值设置为{@code100}，则此功能将被禁用，事件循环将不会尝试平衡I/O和非I/O任务。
      */
     public void setIoRatio(int ioRatio) {
         if (ioRatio <= 0 || ioRatio > 100) {
@@ -446,6 +446,8 @@ public final class NioEventLoop extends SingleThreadEventLoop {
         for (;;) {
             try {
                 try {
+                    // hasTasks()  若taskQueue or  tailTasks任务队列中有任务  返回false  没有则返回true
+                    // 有任务返回selectNow的返回值   没任务返回-1
                     switch (selectStrategy.calculateStrategy(selectNowSupplier, hasTasks())) {
                     case SelectStrategy.CONTINUE:
                         continue;
@@ -454,36 +456,9 @@ public final class NioEventLoop extends SingleThreadEventLoop {
                         // fall-through to SELECT since the busy-wait is not supported with NIO
 
                     case SelectStrategy.SELECT:
+                        // 首先轮询注册到 eventLoop 线程对应的selector上的所有的channel的IO事件
+                        // wakenUp 表示是否应该唤醒正在阻塞的select操作，netty在每次进行新的loop之前，都会将wakeUp 被设置成false，标志新的一轮loop的开始
                         select(wakenUp.getAndSet(false));
-
-                        // 'wakenUp.compareAndSet(false, true)' is always evaluated
-                        // before calling 'selector.wakeup()' to reduce the wake-up
-                        // overhead. (Selector.wakeup() is an expensive operation.)
-                        //
-                        // However, there is a race condition in this approach.
-                        // The race condition is triggered when 'wakenUp' is set to
-                        // true too early.
-                        //
-                        // 'wakenUp' is set to true too early if:
-                        // 1) Selector is waken up between 'wakenUp.set(false)' and
-                        //    'selector.select(...)'. (BAD)
-                        // 2) Selector is waken up between 'selector.select(...)' and
-                        //    'if (wakenUp.get()) { ... }'. (OK)
-                        //
-                        // In the first case, 'wakenUp' is set to true and the
-                        // following 'selector.select(...)' will wake up immediately.
-                        // Until 'wakenUp' is set to false again in the next round,
-                        // 'wakenUp.compareAndSet(false, true)' will fail, and therefore
-                        // any attempt to wake up the Selector will fail, too, causing
-                        // the following 'selector.select(...)' call to block
-                        // unnecessarily.
-                        //
-                        // To fix this problem, we wake up the selector again if wakenUp
-                        // is true immediately after selector.select(...).
-                        // It is inefficient in that it wakes up the selector for both
-                        // the first case (BAD - wake-up required) and the second case
-                        // (OK - no wake-up required).
-
                         if (wakenUp.get()) {
                             selector.wakeup();
                         }
@@ -500,19 +475,23 @@ public final class NioEventLoop extends SingleThreadEventLoop {
 
                 cancelledKeys = 0;
                 needsToSelectAgain = false;
+                // ioRatio表示事件循环中用于I/O任务的时间比例，默认值是50，所以这里会走到else分支
                 final int ioRatio = this.ioRatio;
                 if (ioRatio == 100) {
                     try {
+                        // 处理就绪的IO事件
                         processSelectedKeys();
                     } finally {
-                        // Ensure we always run tasks.
+                        // 处理任务队列
                         runAllTasks();
                     }
                 } else {
                     final long ioStartTime = System.nanoTime();
                     try {
+                        // 处理就绪的IO事件
                         processSelectedKeys();
                     } finally {
+                        // 处理任务队列
                         // Ensure we always run tasks.
                         final long ioTime = System.nanoTime() - ioStartTime;
                         runAllTasks(ioTime * (100 - ioRatio) / ioRatio);
@@ -549,6 +528,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
 
     private void processSelectedKeys() {
         if (selectedKeys != null) {
+            // 有事件的话会进到这里
             processSelectedKeysOptimized();
         } else {
             processSelectedKeysPlain(selector.selectedKeys());
@@ -696,6 +676,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             // Also check for readOps of 0 to workaround possible JDK bug which may otherwise lead
             // to a spin loop
             if ((readyOps & (SelectionKey.OP_READ | SelectionKey.OP_ACCEPT)) != 0 || readyOps == 0) {
+                // 连接或读事件
                 unsafe.read();
             }
         } catch (CancelledKeyException ignored) {

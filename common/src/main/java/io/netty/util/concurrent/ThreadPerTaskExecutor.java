@@ -37,7 +37,7 @@ public final class ThreadPerTaskExecutor implements Executor {
 
     @Override
     public void execute(Runnable command) {
-        // 创建一个 Thread ，然后调用 Thread#start() 方法，启动线程执行任务。
+        // 每次都创建一个新的线程并启动
         threadFactory.newThread(command).start();
     }
 }
