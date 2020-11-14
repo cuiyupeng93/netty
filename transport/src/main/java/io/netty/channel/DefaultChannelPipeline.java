@@ -649,7 +649,6 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         assert channel.eventLoop().inEventLoop();
         if (firstRegistration) {
             firstRegistration = false;
-            // 我们现在注册到EventLoop。现在是调用ChannelHandlers的回调的时候了，这些回调是在注册完成之前添加的。
             callHandlerAddedForAllHandlers();
         }
     }

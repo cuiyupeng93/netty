@@ -125,38 +125,37 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
     }
 
     /**
-     * cui：到此步时 channel 刚被创建出来
-     * @param channel
+     * 初始化Channel的配置
      */
     @Override
     void init(Channel channel) {
-        // 将启动器配置的可选项集合，配置到当前 channel 的可选项集合
+        // 1. 将启动器配置的可选项集合，配置到当前 channel 的可选项集合
         setChannelOptions(channel, options0().entrySet().toArray(newOptionArray(0)), logger);
 
-        // 将启动器配置的属性集合，配置到当前 channel 的属性集合
+        // 2. 将启动器配置的属性集合，配置到当前 channel 的属性集合
         setAttributes(channel, attrs0().entrySet().toArray(newAttrArray(0)));
 
+        // 注意：这是服务端Channel的pipeline
         ChannelPipeline p = channel.pipeline();
 
-        // 记录当前的属性
+        // workGroup线程池使用的一些属性，传递给ServerBootstrapAcceptor使用
         final EventLoopGroup currentChildGroup = childGroup;
         final ChannelHandler currentChildHandler = childHandler;
         final Entry<ChannelOption<?>, Object>[] currentChildOptions =
                 childOptions.entrySet().toArray(newOptionArray(0));
         final Entry<AttributeKey<?>, Object>[] currentChildAttrs = childAttrs.entrySet().toArray(newAttrArray(0));
 
-        // 添加 ChannelInitializer 对象到 pipeline 中，用于后续初始化 ChannelHandler 到 pipeline 中。
+        // 给服务端Channel#pipeline里加一个ChannelInitializer，用于后续初始化服务端Channel#pipeline
         p.addLast(new ChannelInitializer<Channel>() {
             @Override
             public void initChannel(final Channel ch) {
                 final ChannelPipeline pipeline = ch.pipeline();
-                // 添加启动器配置的 ChannelHandler 到 pipeline 中
+                // 添加启动器配置的ChannelHandler到此pipeline中
                 ChannelHandler handler = config.handler();
                 if (handler != null) {
                     pipeline.addLast(handler);
                 }
-                // 添加 ServerBootstrapAcceptor 到 pipeline 中。
-                // 使用 EventLoop 执行的原因，参见 https://github.com/lightningMan/netty/commit/4638df20628a8987c8709f0f8e5f3679a914ce1a
+                // 添加ServerBootstrapAcceptor到此pipeline中
                 ch.eventLoop().execute(new Runnable() {
                     @Override
                     public void run() {

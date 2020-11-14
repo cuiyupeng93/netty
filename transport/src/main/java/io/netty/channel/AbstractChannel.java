@@ -478,17 +478,17 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 return;
             }
 
-            // 把 eventLoop 赋值给了 channel，这里的eventLoop 通过前面的分析，应当是NioEventLoop
+            // 1. 把eventLoop赋值给了channel
             AbstractChannel.this.eventLoop = eventLoop;
 
-            // 判断当前channel绑定的eventLoop的线程是否已经启动
-            // 如果是从 ServerBootstrap#bind 方法过来的，肯定是false
+            // 2. 调用register0，完成真正的注册流程（即javaChannel注册到selector上）
+            // 此时eventLoop可能还没启动，所以要判断一下。
+            // 如果已经启动，eventLoop.inEventLoop()结果是true，此时可以直接执行register0；
+            // 如果还未启动，需要先启动它，所以将register0作为一个任务提交给eventLoop的任务队列，等它启动后会轮询任务并执行
             if (eventLoop.inEventLoop()) {
-                // register0 方法：将真正的javaChannel，注册到selector上
                 register0(promise);
             } else {
                 try {
-                    // eventLoop.execute：如果这时候eventLoop还没有启动，启动它上面的线程，启动后这个eventLoop就开始轮询事件了
                     eventLoop.execute(new Runnable() {
                         @Override
                         public void run() {
@@ -508,22 +508,33 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
 
         private void register0(ChannelPromise promise) {
             try {
-                // 检查通道是否仍处于打开状态，因为它可能在寄存器调用处于eventLoop之外时关闭
+                // 首先设置注册操作不可被取消，并且确保channel处于打开状态，这两个任一条件不满足，都不会执行下面的注册逻辑
                 if (!promise.setUncancellable() || !ensureOpen(promise)) {
                     return;
                 }
                 boolean firstRegistration = neverRegistered;
-                // 这一步将 javaChannel 注册到 Selector 上
-                // 下一步调用 io.netty.channel.nio.AbstractNioChannel.doRegister
+                // 1. 将javaChannel注册到Selector上（此时暂时没有设置其关注的事件，只是注册）
                 doRegister();
                 neverRegistered = false;
                 registered = true;
 
-                // Ensure we call handlerAdded(...) before we actually notify the promise. This is needed as the
-                // user may already fire events through the pipeline in the ChannelFutureListener.
+                // 2. 调用HandlerAdd事件
+                // 这里内部会调用我们自己实现的ChannelInitializer#initChannel方法，用来给channel#pipeline进行初始化
+                // 初始化完后，会将ChannelInitializer从pipeline中移除
+                // 比如：如果是服务端channel进到了register0方法，就会调用在ServerBootstrap.init方法里，添加ServerBootstrapAcceptor的逻辑
                 pipeline.invokeHandlerAddedIfNeeded();
 
+                // 代码有点多，先回顾一下：
+                // （1）这里promise代表"Channel注册到EventLoop"这个操作的执行结果；
+                // （2）此时调用这个方法的，有可能是启动程序的线程，也可能是eventLoop中的线程
+
+                // 3. 标记promise为成功，这一步有两个作用：
+                // （1）通知所有等待在此promise的线程。比如serverBootstrap.bind().sync()，这里sync就会使主线程调用wait进入等待
+                // （2）通知此promise上的所有监听器，回调它们的operationComplete方法
                 safeSetSuccess(promise);
+
+                // todo qa 2020-11-14 后面暂时不理解，留待后续分析
+                // 4. fireChannelRegistered
                 pipeline.fireChannelRegistered();
                 // Only fire a channelActive if the channel has never been registered. This prevents firing
                 // multiple channel actives if the channel is deregistered and re-registered.
@@ -568,6 +579,8 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
 
             boolean wasActive = isActive();
             try {
+                // 1. 最终调用doBind方法，完成javaChannel绑定本地端口的操作
+                // 这一步会根据使用的Channel类型，调用对应的doBind方法，比如NioServerSocketChannel#doBind
                 doBind(localAddress);
             } catch (Throwable t) {
                 safeSetFailure(promise, t);
@@ -575,6 +588,8 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 return;
             }
 
+            // todo qa 2020-11-14 这一步暂时不理解，暂不做分析
+            // 2. fireChannelActive
             if (!wasActive && isActive()) {
                 invokeLater(new Runnable() {
                     @Override
@@ -584,6 +599,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 });
             }
 
+            // 3. 标记promise成功，回调监听器
             safeSetSuccess(promise);
         }
 
@@ -1002,6 +1018,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
          * Marks the specified {@code promise} as success.  If the {@code promise} is done already, log a message.
          */
         protected final void safeSetSuccess(ChannelPromise promise) {
+            // 标记promise的状态变更为成功
             if (!(promise instanceof VoidChannelPromise) && !promise.trySuccess()) {
                 logger.warn("Failed to mark a promise as success because it is done already: {}", promise);
             }
@@ -1011,6 +1028,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
          * Marks the specified {@code promise} as failure.  If the {@code promise} is done already, log a message.
          */
         protected final void safeSetFailure(ChannelPromise promise, Throwable cause) {
+            // 标记promise的状态变更为失败，并附加失败原因
             if (!(promise instanceof VoidChannelPromise) && !promise.tryFailure(cause)) {
                 logger.warn("Failed to mark a promise as failure because it's done already: {}", promise, cause);
             }

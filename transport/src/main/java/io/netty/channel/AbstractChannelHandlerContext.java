@@ -486,6 +486,8 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
             return promise;
         }
 
+        // 从尾节点开始向前找，找下一个继承ChannelOutboundHandler的类
+        // 由于这里添加的是ChannelInboundHandler，原来的ServerBootstrapAcceptor也是ChannelInboundHandler，所以这里找到的next就是HeadContext
         final AbstractChannelHandlerContext next = findContextOutbound(MASK_BIND);
         EventExecutor executor = next.executor();
         if (executor.inEventLoop()) {

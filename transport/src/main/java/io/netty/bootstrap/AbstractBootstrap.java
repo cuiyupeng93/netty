@@ -271,42 +271,38 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
         return doBind(ObjectUtil.checkNotNull(localAddress, "localAddress"));
     }
 
-    /**
-     * ★★★ 绑定本地地址和端口
-     */
     private ChannelFuture doBind(final SocketAddress localAddress) {
-        // 第一步：初始化并注册一个 Channel 对象，因为注册是异步的过程，所以返回一个 ChannelFuture 对象。
+        // 1. 初始化 Channel 操作，都在initAndRegister方法中
+        // 主要是：创建Channel、初始化Channel、Channel注册到EventLoop，其中注册是异步流程，会返回一个regFuture代表注册流程的结果
         final ChannelFuture regFuture = initAndRegister();
         final Channel channel = regFuture.channel();
-        if (regFuture.cause() != null) {// 若发生异常，直接返回。
+        if (regFuture.cause() != null) {
             return regFuture;
         }
 
-        // 第二步：绑定 Channel 的端口，并注册 Channel 到 SelectionKey 中。
-        // 因为注册是异步的过程，有可能已完成，有可能未完成。所以分成 if-else 分别处理已完成和未完成的情况
+        // 2. doBind0操作
+        // doBind0是核心代码，用于设置Channel绑定端口，并注册到SelectionKey中。
+        // 因为"Channel注册到EventLoop"是异步操作，执行到此不能确定操作是否已完成，所以这里使用if-else判断。最终都会执行到doBind0方法
         if (regFuture.isDone()) {
-            // 到此步已经注册完成
+            // "Channel注册到EventLoop" 操作已完成，直接调用doBind0
+            // 注意：完成不代表成功，可能是成功、失败、取消，doBind0里会根据这个promise的状态得知注册操作的结果
             ChannelPromise promise = channel.newPromise();
-            // doBind0 是核心的代码，用于绑定 Channel 的端口，并注册 Channel 到 SelectionKey 中。
             doBind0(regFuture, channel, localAddress, promise);
             return promise;
         } else {
-            // 注册虽然通常都会成功，但也要以防万一
+            // 此时Channel尚未初始化完成，注册一个监听器，等它完成后回调执行doBind0
             final PendingRegistrationPromise promise = new PendingRegistrationPromise(channel);
-            // 添加监听器，在注册完成后，进行回调执行 doBind0
+            // 添加监听器，在"Channel注册到EventLoop"这个操作完成后，进行回调执行 doBind0
+            // （更具体的说，就是AbstractChannel.AbstractUnsafe#register0方法中的safeSetSuccess执行后，就会通知回调此监听器）
             regFuture.addListener(new ChannelFutureListener() {
                 @Override
                 public void operationComplete(ChannelFuture future) throws Exception {
                     Throwable cause = future.cause();
                     if (cause != null) {
                         // 注册失败
-                        // Registration on the EventLoop failed so fail the ChannelPromise directly to not cause an
-                        // IllegalStateException once we try to access the EventLoop of the Channel.
                         promise.setFailure(cause);
                     } else {
-                        // 注册成功
-                        // Registration was successful, so set the correct executor to use.
-                        // See https://github.com/netty/netty/issues/2586
+                        // 注册成功，执行doBind0方法
                         promise.registered();
                         doBind0(regFuture, channel, localAddress, promise);
                     }
@@ -317,58 +313,41 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     }
 
     /**
-     * ★★★ 初始化并注册一个 Channel 对象。
-     * 是异步注册
-     * @return 返回一个 ChannelFuture
+     * 初始化Channel流程 ★★★
      */
     final ChannelFuture initAndRegister() {
         Channel channel = null;
         try {
-            // 通过反射创建 Channel 对象
+            // 1. 通过反射创建Channel对象
             channel = channelFactory.newChannel();
-            // 初始化 Channel 配置
+            // 2. 初始化Channel配置
             init(channel);
         } catch (Throwable t) {
-            if (channel != null) {// 已创建 Channel 对象
-                // channel can be null if newChannel crashed (eg SocketException("too many open files"))
-                channel.unsafe().closeForcibly();// 强制关闭 Channel
-
-                // 由于 channel 还没有注册，我们需要强制使用GlobalEventExecutor
+            if (channel != null) {
+                // 如果Channel已经创建好了，需要强制关闭它，避免资源浪费
+                channel.unsafe().closeForcibly();
+                // 由于出现异常了，Channel还没有执行到注册流程，所以还没有和一个eventLoop绑定，
+                // 但是返回的DefaultChannelPromise里又需要一个执行器对象，来执行通知监听器、唤醒线程等操作，
+                // 所以这里使用了一个 GlobalEventExecutor.INSTANCE
+                // 并在最后setFailure，也就是告诉上层方法，初始化Channel失败了，失败原因封装在当前异常对象里
                 return new DefaultChannelPromise(channel, GlobalEventExecutor.INSTANCE).setFailure(t);
             }
-            // 由于 channel 还没有注册，我们需要强制使用GlobalEventExecutor
+            // 如果Channel还没有创建，直接返回一个DefaultChannelPromise，并setFailure
             return new DefaultChannelPromise(new FailedChannel(), GlobalEventExecutor.INSTANCE).setFailure(t);
         }
 
-        // 注册 Channel 到 EventLoopGroup 中的一个 eventLoop上
+        // 3. Channel注册到EventLoopGroup中的一个eventLoop上（其实是将eventLoop绑定到这个Channel上）
+        // 这一步是异步操作，所以返回一个ChannelFuture
         ChannelFuture regFuture = config().group().register(channel);
         if (regFuture.cause() != null) {
             if (channel.isRegistered()) {
-                // 若发生异常，并且 Channel 已经注册成功，则调用 #close() 方法，正常关闭 Channel 。
+                // 若发生异常，并且Channel已经注册成功，则正常关闭Channel
                 channel.close();
             } else {
-                // 若发生异常，并且 Channel 并未注册成功，则调用 #closeForcibly() 方法，强制关闭 Channel 。
-                channel.unsafe().closeForcibly(); // 强制关闭 Channel
+                // 若发生异常，并且Channel并未注册成功，则强制关闭Channel
+                channel.unsafe().closeForcibly();
             }
         }
-
-        // If we are here and the promise is not failed, it's one of the following cases:
-        // 1) If we attempted registration from the event loop, the registration has been completed at this point.
-        //    i.e. It's safe to attempt bind() or connect() now because the channel has been registered.
-        // 2) If we attempted registration from the other thread, the registration request has been successfully
-        //    added to the event loop's task queue for later execution.
-        //    i.e. It's safe to attempt bind() or connect() now:
-        //         because bind() or connect() will be executed *after* the scheduled registration task is executed
-        //         because register(), bind(), and connect() are all bound to the same thread.
-
-        //译：
-        // 如果我们到这里 promise 没有失败，属于下列case之一
-        // 1) 如果我们尝试从事件循环中注册，并且此时已经注册成功
-        //    例如，现在尝试bind()或connect()是安全的，因为通道已经注册了。
-        // 2) 如果我们尝试从另一个线程注册，注册请求已经成功地添加到事件循环的任务队列中，以供以后执行。
-        //    例如，现在尝试bind()或connect()是安全的:
-        //         因为bind()或connect()将在执行计划的注册任务之后执行
-        //         因为register()、bind()和connect()都绑定到同一个线程。
         return regFuture;
     }
 
@@ -379,19 +358,20 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
      */
     abstract void init(Channel channel) throws Exception;
 
-    // 绑定 Channel 的端口，并注册 Channel 到 SelectionKey 中。
+    // 设置Channel绑定端口，并注册到SelectionKey中。
     private static void doBind0(
             final ChannelFuture regFuture, final Channel channel,
             final SocketAddress localAddress, final ChannelPromise promise) {
 
-        // This method is invoked before channelRegistered() is triggered.  Give user handlers a chance to set up
-        // the pipeline in its channelRegistered() implementation.
+        // doBind0向EventLoop任务队列中添加一个bind任务来完成后续操作
         channel.eventLoop().execute(new Runnable() {
             @Override
             public void run() {
                 if (regFuture.isSuccess()) {
+                    // 绑定本地端口
                     channel.bind(localAddress, promise).addListener(ChannelFutureListener.CLOSE_ON_FAILURE);
                 } else {
+                    // 如果初始化channel失败，这里直接设为失败
                     promise.setFailure(regFuture.cause());
                 }
             }
