@@ -76,19 +76,15 @@ public class DefaultChannelPipeline implements ChannelPipeline {
     private boolean firstRegistration = true;
 
     /**
-     * pendingHandlerCallbackHead 表示Channel注册成功后，在标记promise成功之前（register0方法中的invokeHandlerAddedIfNeeded），需要先调用的回调任务
-     * 它的结构其实是一个单向链表，里面有一个next指向下一个任务，这里拿到的是这个链表的头节点。
-     * 它会在callHandlerAddedForAllHandlers方法中被循环调用执行所有的任务
-     * 我们之所以只保留头节点，是因为预计这个链表不经常使用，而且大小也很小
+     * pendingHandlerCallbackHead是当前pipeline保存的一个任务链的头节点，
+     * 它是一个单向链表，里面有一个next指向下一个任务
      *
-     * 总结：pipeline中每一个节点，在添加到pipeline中（或从pipeline中移除）时，
+     * pipeline中每一个节点，在添加到pipeline中（或从pipeline中移除）时，
      * 都向此任务链的末尾添加了一个 PendingHandlerAddedTask（或 PendingHandlerRemovedTask）的任务。
-     * 这两个任务分别代表：回调 ChannelHandler#handlerAdded(ChannelHandlerContext)、回调 ChannelHandler#handlerRemoved(ChannelHandlerContext)
-     *
-     *
-     *
-     * 备注：经过分析源码，发现pendingHandlerCallbackHead只会添加两种任务：PendingHandlerAddedTask 和 PendingHandlerRemovedTask
-     * 这两个任务分别表示：调用handlerAdded方法、调用handlerRemoved方法。
+     * 这两个任务分别代表：
+     *      回调 ChannelHandler#handlerAdded(ChannelHandlerContext)
+     *      回调 ChannelHandler#handlerRemoved(ChannelHandlerContext)
+     * 这些任务会在 invokeHandlerAddedIfNeeded方法被调用时，被循环执行，且只被执行一次
      */
     private PendingHandlerCallback pendingHandlerCallbackHead;
 

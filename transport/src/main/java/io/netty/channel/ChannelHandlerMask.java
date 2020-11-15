@@ -89,10 +89,13 @@ final class ChannelHandlerMask {
     private static int mask0(Class<? extends ChannelHandler> handlerType) {
         int mask = MASK_EXCEPTION_CAUGHT;
         try {
+            // 入站事件
             if (ChannelInboundHandler.class.isAssignableFrom(handlerType)) {
+                // mask默认处理所有Inboud事件
                 mask |= MASK_ALL_INBOUND;
 
-                // ～表示按位取反
+                // ～表示按位取反，isSkippable返回true，表示该方法可以跳过，从mask中将其过滤掉
+                // 在ChannelInboundHandlerAdapter中给所有Inbound事件方法都提供了一个默认实现，都是可以Skip的
                 if (isSkippable(handlerType, "channelRegistered", ChannelHandlerContext.class)) {
                     mask &= ~MASK_CHANNEL_REGISTERED;
                 }
@@ -119,7 +122,9 @@ final class ChannelHandlerMask {
                 }
             }
 
+            // 出战事件
             if (ChannelOutboundHandler.class.isAssignableFrom(handlerType)) {
+                // mask默认处理所有Outbound事件
                 mask |= MASK_ALL_OUTBOUND;
 
                 if (isSkippable(handlerType, "bind", ChannelHandlerContext.class,
@@ -172,10 +177,12 @@ final class ChannelHandlerMask {
                 try {
                     m = handlerType.getMethod(methodName, paramTypes);
                 } catch (NoSuchMethodException e) {
+                    // 如果Handler没有指定方法，返回false表示不可跳过
                     logger.debug(
                         "Class {} missing method {}, assume we can not skip execution", handlerType, methodName, e);
                     return false;
                 }
+                // 如果存在指定方法，并且方法有Skip注解，则返回true，表示可以跳过
                 return m != null && m.isAnnotationPresent(Skip.class);
             }
         });
