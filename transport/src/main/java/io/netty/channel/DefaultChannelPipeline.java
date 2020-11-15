@@ -964,7 +964,6 @@ public class DefaultChannelPipeline implements ChannelPipeline {
 
     @Override
     public final ChannelPipeline fireChannelRead(Object msg) {
-        // 在接入新连接时，时 NioSocketChannel
         AbstractChannelHandlerContext.invokeChannelRead(head, msg);
         return this;
     }
