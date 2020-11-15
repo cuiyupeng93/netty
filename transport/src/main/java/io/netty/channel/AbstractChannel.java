@@ -533,18 +533,15 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 // （2）通知此promise上的所有监听器，回调它们的operationComplete方法
                 safeSetSuccess(promise);
 
-                // todo qa 2020-11-14 后面暂时不理解，留待后续分析
-                // 4. fireChannelRegistered
+                // 4. 此时channel已注册到EventLoop上，可以回调此channel的pipeline上的所有实现了channelRegistered方法的handler了
                 pipeline.fireChannelRegistered();
                 // Only fire a channelActive if the channel has never been registered. This prevents firing
                 // multiple channel actives if the channel is deregistered and re-registered.
                 if (isActive()) {
                     if (firstRegistration) {
-                        // todo qa 2020-11-09 激活channel？
+                        // 此时Channel已活跃，回调此channel的pipeline上的所有实现了channelActive方法的handler
                         pipeline.fireChannelActive();
                     } else if (config().isAutoRead()) {
-                        // 此通道在之前注册，并且设置了autoRead（）。这意味着我们需要重新开始读取，以便处理入站数据。
-                        // See https://github.com/netty/netty/issues/4805
                         beginRead();
                     }
                 }

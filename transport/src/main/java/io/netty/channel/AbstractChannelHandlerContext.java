@@ -66,20 +66,20 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
             AtomicIntegerFieldUpdater.newUpdater(AbstractChannelHandlerContext.class, "handlerState");
 
     /**
-     * {@link ChannelHandler#handlerAdded(ChannelHandlerContext)} is about to be called.
+     * ChannelHandler#handlerAdded(ChannelHandlerContext) 即将被调用
      */
     private static final int ADD_PENDING = 1;
     /**
-     * {@link ChannelHandler#handlerAdded(ChannelHandlerContext)} was called.
+     * ChannelHandler#handlerAdded(ChannelHandlerContext) 已经被调用
      */
     private static final int ADD_COMPLETE = 2;
     /**
-     * {@link ChannelHandler#handlerRemoved(ChannelHandlerContext)} was called.
+     * ChannelHandler#handlerRemoved(ChannelHandlerContext) 已经被调用
      */
     private static final int REMOVE_COMPLETE = 3;
     /**
-     * Neither {@link ChannelHandler#handlerAdded(ChannelHandlerContext)}
-     * nor {@link ChannelHandler#handlerRemoved(ChannelHandlerContext)} was called.
+     * ChannelHandler的初始状态，表示
+     * ChannelHandler#handlerAdded(ChannelHandlerContext) 和 ChannelHandler#handlerRemoved(ChannelHandlerContext) 都没有被调用
      */
     private static final int INIT = 0;
 
@@ -97,6 +97,8 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
     // There is no need to make this volatile as at worse it will just create a few more instances then needed.
     private Tasks invokeTasks;
 
+    // handlerState表示AbstractChannelHandlerContext对应的ChannelHandler的状态
+    // 有这些状态：ADD_PENDING、ADD_COMPLETE、REMOVE_COMPLETE、INIT
     private volatile int handlerState = INIT;
 
     AbstractChannelHandlerContext(DefaultChannelPipeline pipeline, EventExecutor executor,
@@ -964,10 +966,12 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
     }
 
     final void callHandlerAdded() throws Exception {
-        // We must call setAddComplete before calling handlerAdded. Otherwise if the handlerAdded method generates
-        // any pipeline events ctx.handler() will miss them because the state will not allow it.
+        // 通过CAS将handlerState更新成ADD_COMPLETE状态
+        // 必须在调用handlerAdded之前，调用setAddComplete。否则如果handlerAdded方法生成任何pipeline事件，handler会错过他们，因为它的状态不允许。
         if (setAddComplete()) {
-            // 这里 handler() 方法获取的是 ServerBootstrap 中添加的匿名类，ChannelInitializer。这时候调用 ChannelInitializer#handlerAdded 方法
+            // 然后取出当前context里的handler，调用它的handlerAdded方法
+            // 比如，如果当前handler是ChannelInitializer，就会调用ChannelInitializer#handlerAdded方法，
+            // 在ChannelInitializer里对handlerAdded的实现是：调用initChannel方法，所以就会调用我们自己实现的initChannel来初始化pipeline
             handler().handlerAdded(this);
         }
     }
@@ -985,12 +989,10 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
     }
 
     /**
-     * Makes best possible effort to detect if {@link ChannelHandler#handlerAdded(ChannelHandlerContext)} was called
-     * yet. If not return {@code false} and if called or could not detect return {@code true}.
+     * 尽最大努力检测 ChannelHandler#handlerAdded(ChannelHandlerContext) 是否已被调用，如果没有返回false；如果已调用或者没办法检测，返回true。
      *
-     * If this method returns {@code false} we will not invoke the {@link ChannelHandler} but just forward the event.
-     * This is needed as {@link DefaultChannelPipeline} may already put the {@link ChannelHandler} in the linked-list
-     * but not called {@link ChannelHandler#handlerAdded(ChannelHandlerContext)}.
+     * 如果这个方法返回false，我们将不会调用调用ChannelHandler而只是转发事件。
+     * 这是必需的，因为DefaultChannelPipeline可能已经将ChannelHandler放进链表中，但没有调用ChannelHandler#handlerAdded(ChannelHandlerContext)
      */
     private boolean invokeHandler() {
         // Store in local variable to reduce volatile reads.

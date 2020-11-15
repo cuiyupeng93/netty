@@ -27,6 +27,7 @@ import java.util.Map;
 public abstract class ChannelHandlerAdapter implements ChannelHandler {
 
     // Not using volatile because it's used only for a sanity check.
+    // added 用来标识一下当前ChannelHandler是否已经添加到当前线程的InternalThreadLocalMap中
     boolean added;
 
     /**

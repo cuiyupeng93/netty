@@ -113,7 +113,7 @@ public abstract class ChannelInitializer<C extends Channel> extends ChannelInbou
             // will be added in the expected order.
             if (initChannel(ctx)) {
 
-                // We are done with init the Channel, removing the initializer now.
+                // 我们现在已经完成了init，可以移除initializer了
                 removeState(ctx);
             }
         }

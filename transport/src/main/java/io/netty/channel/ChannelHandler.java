@@ -178,7 +178,7 @@ import java.lang.annotation.Target;
 public interface ChannelHandler {
 
     /**
-     * Gets called after the {@link ChannelHandler} was added to the actual context and it's ready to handle events.
+     * 当此Handler被添加到Context，并准备好处理事件后会调用此方法
      */
     void handlerAdded(ChannelHandlerContext ctx) throws Exception;
 

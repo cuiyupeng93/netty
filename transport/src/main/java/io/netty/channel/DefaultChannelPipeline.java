@@ -40,9 +40,9 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 
 /**
- * The default {@link ChannelPipeline} implementation.  It is usually created
- * by a {@link Channel} implementation when the {@link Channel} is created.
+ * ChannelPipeline 的默认实现
  */
+@SuppressWarnings("Duplicates")
 public class DefaultChannelPipeline implements ChannelPipeline {
 
     static final InternalLogger logger = InternalLoggerFactory.getInstance(DefaultChannelPipeline.class);
@@ -64,7 +64,9 @@ public class DefaultChannelPipeline implements ChannelPipeline {
     final AbstractChannelHandlerContext head;
     final AbstractChannelHandlerContext tail;
 
+    // 每个channel和pipeline是一一对应的，双方互持对方的引用
     private final Channel channel;
+    // succeededFuture 和 voidPromise 用来处理异步操作
     private final ChannelFuture succeededFuture;
     private final VoidChannelPromise voidPromise;
     private final boolean touch = ResourceLeakDetector.isEnabled();
@@ -74,18 +76,25 @@ public class DefaultChannelPipeline implements ChannelPipeline {
     private boolean firstRegistration = true;
 
     /**
-     * This is the head of a linked list that is processed by {@link #callHandlerAddedForAllHandlers()} and so process
-     * all the pending {@link #callHandlerAdded0(AbstractChannelHandlerContext)}.
+     * pendingHandlerCallbackHead 表示Channel注册成功后，在标记promise成功之前（register0方法中的invokeHandlerAddedIfNeeded），需要先调用的回调任务
+     * 它的结构其实是一个单向链表，里面有一个next指向下一个任务，这里拿到的是这个链表的头节点。
+     * 它会在callHandlerAddedForAllHandlers方法中被循环调用执行所有的任务
+     * 我们之所以只保留头节点，是因为预计这个链表不经常使用，而且大小也很小
      *
-     * We only keep the head because it is expected that the list is used infrequently and its size is small.
-     * Thus full iterations to do insertions is assumed to be a good compromised to saving memory and tail management
-     * complexity.
+     * 总结：pipeline中每一个节点，在添加到pipeline中（或从pipeline中移除）时，
+     * 都向此任务链的末尾添加了一个 PendingHandlerAddedTask（或 PendingHandlerRemovedTask）的任务。
+     * 这两个任务分别代表：回调 ChannelHandler#handlerAdded(ChannelHandlerContext)、回调 ChannelHandler#handlerRemoved(ChannelHandlerContext)
+     *
+     *
+     *
+     * 备注：经过分析源码，发现pendingHandlerCallbackHead只会添加两种任务：PendingHandlerAddedTask 和 PendingHandlerRemovedTask
+     * 这两个任务分别表示：调用handlerAdded方法、调用handlerRemoved方法。
      */
     private PendingHandlerCallback pendingHandlerCallbackHead;
 
     /**
-     * Set to {@code true} once the {@link AbstractChannel} is registered.Once set to {@code true} the value will never
-     * change.
+     * true表示：Channel已注册到EventLoop。
+     * 一旦设置为true，就不会再改变了
      */
     private boolean registered;
 
@@ -156,28 +165,55 @@ public class DefaultChannelPipeline implements ChannelPipeline {
     public final ChannelPipeline addFirst(EventExecutorGroup group, String name, ChannelHandler handler) {
         final AbstractChannelHandlerContext newCtx;
         synchronized (this) {
+            // 1. 检查若handler不共享，是否重复
             checkMultiplicity(handler);
+
+            // 2. 给当前handler生成一个名字
+            // （若name==null，生成一个；若name!=null，检查一下是否重复）
             name = filterName(name, handler);
 
+            // 3. 将handler包装成一个Context
+            // （备注：因为pipeline中的节点类型是AbstractChannelHandlerContext，这里实际上是创建了一个DefaultChannelHandlerContext）
             newCtx = newContext(group, name, handler);
 
+            // 4. 将新创建的newCtx节点，添加到head节点后面
             addFirst0(newCtx);
 
-            // If the registered is false it means that the channel was not registered on an eventLoop yet.
-            // In this case we add the context to the pipeline and add a task that will call
-            // ChannelHandler.handlerAdded(...) once the channel is registered.
+            // 5. 执行handler的handlerAdded方法
+            // 因为此时Channel可能还没有注册到EventLoop上，或者已注册但EventLoop还没有启动，所以handlerAdded可能以任务的形式被回调执行；
+            // 分为三种情况：
+            //（1）Channel还没有注册到EventLoop上
+            //  这种情况，会将handlerAdded以任务的形式，追加到此pipeline的pendingHandlerCallbackHead上（它可以理解为一个任务链）
+            //  当Channel完成注册时，会调用pipeline.invokeHandlerAddedIfNeeded();方法（代码位置：AbstractChannel.AbstractUnsafe#register0），
+            //  这个方法里会调用callHandlerAddedForAllHandlers方法，方法里会循环执行所有的pendingHandlerCallback任务
+
+            //（2）Channel已经注册到EventLoop上，但EventLoop还没有启动
+            //  这种情况，由于已经错过了pipeline.invokeHandlerAddedIfNeeded();的执行，
+            //  所以会将handlerAdded以任务的形式，提交给eventLoop执行，顺便也启动了eventLoop
+
+            //（3）Channel已经注册到EventLoop上，并且EventLoop已经启动
+            //  这种情况，会直接执行handlerAdded回调
+
+            // 对于前两种情况，不能直接执行的，handlerState会被设置为ADD_PENDING，当要执行handlerAdded之前，会使用CAS将其状态改为ADD_COMPLETE；
+            // 对于第三种情况，可以直接执行，会直接将handlerState设置为ADD_COMPLETE，然后执行handlerAdded
+            // 这样做是为了保证，handlerAdded只会被执行一次。
+
+            // 如果registered==false，表示channel尚未注册到eventLoop上，复合上述情况（1）
             if (!registered) {
                 newCtx.setAddPending();
                 callHandlerCallbackLater(newCtx, true);
                 return this;
             }
 
+            // 到这一步，说明Channel已经注册到一个EventLoop了，但是还没启动，符合情况（2）
             EventExecutor executor = newCtx.executor();
             if (!executor.inEventLoop()) {
                 callHandlerAddedInEventLoop(newCtx, executor);
                 return this;
             }
         }
+
+        // 这一步说明Channel已经注册到一个EventLoop了，并且EventLoop已经启动了，符合情况（3）
         callHandlerAdded0(newCtx);
         return this;
     }
@@ -201,6 +237,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         synchronized (this) {
             checkMultiplicity(handler);
 
+            // 将
             newCtx = newContext(group, filterName(name, handler), handler);
 
             addLast0(newCtx);
@@ -596,6 +633,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         oldCtx.next = newCtx;
     }
 
+    // 检查ChannelHandlerAdapter在不共享的情况下是否重复
     private static void checkMultiplicity(ChannelHandler handler) {
         if (handler instanceof ChannelHandlerAdapter) {
             ChannelHandlerAdapter h = (ChannelHandlerAdapter) handler;
@@ -1105,6 +1143,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         }
     }
 
+    // 循环执行此pipeline上的所有handler的handlerAdded或者handlerRemoved回调
     private void callHandlerAddedForAllHandlers() {
         final PendingHandlerCallback pendingHandlerCallbackHead;
         synchronized (this) {
@@ -1121,6 +1160,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         // This must happen outside of the synchronized(...) block as otherwise handlerAdded(...) may be called while
         // holding the lock and so produce a deadlock if handlerAdded(...) will try to add another handler from outside
         // the EventLoop.
+        // 循环执行完所有handler的回调任务
         PendingHandlerCallback task = pendingHandlerCallbackHead;
         while (task != null) {
             task.execute();
@@ -1130,7 +1170,9 @@ public class DefaultChannelPipeline implements ChannelPipeline {
 
     private void callHandlerCallbackLater(AbstractChannelHandlerContext ctx, boolean added) {
         assert !registered;
-
+        // 给当前pipeline添加回调任务，如果已经存在其他回调任务，则添加到尾部
+        // added 如果是true，就添加一个PendingHandlerAddedTask，否则就添加一个PendingHandlerRemovedTask
+        // 这两个任务分别表示：调用handlerAdded方法、调用handlerRemoved方法
         PendingHandlerCallback task = added ? new PendingHandlerAddedTask(ctx) : new PendingHandlerRemovedTask(ctx);
         PendingHandlerCallback pending = pendingHandlerCallbackHead;
         if (pending == null) {
@@ -1471,6 +1513,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         void execute() {
             EventExecutor executor = ctx.executor();
             if (executor.inEventLoop()) {
+                // 最终核心是执行callHandlerAdded0方法
                 callHandlerAdded0(ctx);
             } else {
                 try {
@@ -1503,6 +1546,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         void execute() {
             EventExecutor executor = ctx.executor();
             if (executor.inEventLoop()) {
+                // 最终核心是执行callHandlerRemoved0
                 callHandlerRemoved0(ctx);
             } else {
                 try {

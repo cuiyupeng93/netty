@@ -22,7 +22,7 @@ package io.netty.channel;
 public interface ChannelInboundHandler extends ChannelHandler {
 
     /**
-     * The {@link Channel} of the {@link ChannelHandlerContext} was registered with its {@link EventLoop}
+     * 当Channel注册到EventLoop上时，回调此方法
      */
     void channelRegistered(ChannelHandlerContext ctx) throws Exception;
 
@@ -32,6 +32,7 @@ public interface ChannelInboundHandler extends ChannelHandler {
     void channelUnregistered(ChannelHandlerContext ctx) throws Exception;
 
     /**
+     * 当Channel活跃时，回调此方法
      * The {@link Channel} of the {@link ChannelHandlerContext} is now active
      */
     void channelActive(ChannelHandlerContext ctx) throws Exception;
@@ -43,7 +44,7 @@ public interface ChannelInboundHandler extends ChannelHandler {
     void channelInactive(ChannelHandlerContext ctx) throws Exception;
 
     /**
-     * Invoked when the current {@link Channel} has read a message from the peer.
+     * 当前Channel上有数据到来，回调此方法
      */
     void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception;
 
