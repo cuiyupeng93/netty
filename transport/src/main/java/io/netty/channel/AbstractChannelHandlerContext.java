@@ -721,6 +721,8 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
 
     private void invokeWrite0(Object msg, ChannelPromise promise) {
         try {
+            // 调用ChannelHandler的write方法
+            // 在ChannelHandler实现的write方法中，最后都要在调用context的write，使写事件能继续传播，最终到达HeadContext
             ((ChannelOutboundHandler) handler()).write(this, msg, promise);
         } catch (Throwable t) {
             notifyOutboundHandlerException(t, promise);
@@ -754,6 +756,8 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
 
     private void invokeFlush0() {
         try {
+            // 调用ChannelHandler的flush方法
+            // 在ChannelHandler实现的flush方法中，最后都要在调用context的flush，使flush事件能继续传播，最终到达HeadContext
             ((ChannelOutboundHandler) handler()).flush(this);
         } catch (Throwable t) {
             notifyHandlerException(t);
@@ -767,6 +771,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
     }
 
     private void invokeWriteAndFlush(Object msg, ChannelPromise promise) {
+        // 检查一下当前ChannelHandler是否已经安装到pipeline中了（就是handlerAdded方法是否已经被调用过）
         if (invokeHandler()) {
             invokeWrite0(msg, promise);
             invokeFlush0();
@@ -778,6 +783,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
     private void write(Object msg, boolean flush, ChannelPromise promise) {
         ObjectUtil.checkNotNull(msg, "msg");
         try {
+            // 对promise的一些检查
             if (isNotValidPromise(promise, true)) {
                 ReferenceCountUtil.release(msg);
                 // cancelled
@@ -788,17 +794,22 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
             throw e;
         }
 
+        // 1、找到下一个出站类型，且可以处理写事件的ChannelHandler。遍历方向是从尾节点向头节点遍历
         final AbstractChannelHandlerContext next = findContextOutbound(flush ?
                 (MASK_WRITE | MASK_FLUSH) : MASK_WRITE);
         final Object m = pipeline.touch(msg, next);
         EventExecutor executor = next.executor();
+
+        // 2、调用下一个context的invokeWriteAndFlush（或者invokeWrite）方法
         if (executor.inEventLoop()) {
+            // 走到这里说明eventLoop已经启动，所以直接执行
             if (flush) {
                 next.invokeWriteAndFlush(m, promise);
             } else {
                 next.invokeWrite(m, promise);
             }
         } else {
+            // 走到这里说明eventLoop还没有启动，需要等到它启动，才能执行写任务，所以封装成了一个task提交给eventLoop
             final AbstractWriteTask task;
             if (flush) {
                 task = WriteAndFlushTask.newInstance(next, m, promise);
