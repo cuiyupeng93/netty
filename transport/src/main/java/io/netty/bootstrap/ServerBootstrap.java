@@ -209,6 +209,8 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
             };
         }
 
+        // 当新客户端接入时，会先创建代表客户端的NioSocketChannel，然后从pipeline的头节点还是传播ChannelRead事件，
+        // 此时就会调用ServerBootstrapAcceptor的channelRead方法
         @Override
         @SuppressWarnings("unchecked")
         public void channelRead(ChannelHandlerContext ctx, Object msg) {
@@ -223,6 +225,7 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
             setAttributes(child, childAttrs);
 
             try {
+                // 将客户端channel注册到childGroup中的一个eventLoop上
                 childGroup.register(child).addListener(new ChannelFutureListener() {
                     @Override
                     public void operationComplete(ChannelFuture future) throws Exception {

@@ -394,6 +394,8 @@ public abstract class AbstractNioChannel extends AbstractChannel {
         for (;;) {
             try {
                 // 将 javaChannel 注册到 Selector 上
+                // 第二个参数是：感兴趣的事件，此时暂时没有设置
+                // 第三个参数是：selectionKey上attach的对象，这里直接将当前Channel附加到selectionKey上
                 selectionKey = javaChannel().register(eventLoop().unwrappedSelector(), 0, this);
                 return;
             } catch (CancelledKeyException e) {

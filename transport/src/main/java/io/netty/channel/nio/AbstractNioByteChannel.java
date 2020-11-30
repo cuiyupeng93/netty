@@ -94,6 +94,7 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
                 ((SocketChannelConfig) config).isAllowHalfClosure();
     }
 
+    @SuppressWarnings("Duplicates")
     protected class NioByteUnsafe extends AbstractNioUnsafe {
 
         private void closeOnRead(ChannelPipeline pipeline) {
@@ -160,11 +161,14 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
 
                     allocHandle.incMessagesRead(1);
                     readPending = false;
+                    // 在客户端pipeline上传播ChannelRead
                     pipeline.fireChannelRead(byteBuf);
                     byteBuf = null;
                 } while (allocHandle.continueReading());
 
                 allocHandle.readComplete();
+
+                // 在客户端pipeline上传播ChannelReadComplete
                 pipeline.fireChannelReadComplete();
 
                 if (close) {

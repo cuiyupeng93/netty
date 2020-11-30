@@ -56,6 +56,7 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
         super.doBeginRead();
     }
 
+    @SuppressWarnings("Duplicates")
     private final class NioMessageUnsafe extends AbstractNioUnsafe {
 
         private final List<Object> readBuf = new ArrayList<Object>();
@@ -73,7 +74,8 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
             try {
                 try {
                     do {
-                        // 走这里
+                        // 在doReadMessages方法里接收客户端的连接，将获取到代表客户端的对象放入readBuf里
+                        // 如果使用NIO，readBuf里放入的就是NioSocketChannel对象
                         int localRead = doReadMessages(readBuf);
                         if (localRead == 0) {
                             break;
@@ -89,14 +91,19 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
                     exception = t;
                 }
 
+                // 遍历新接入的客户端Channel集合，逐个给服务端Channel传播ChannelRead事件，msg就是新创建的客户端Channel对象
+                // 如果是NIO，则这里就是NioSocketChannel对象
+                // 注意：这里是在服务端pipeline中传播ChannelRead事件
                 int size = readBuf.size();
                 for (int i = 0; i < size; i ++) {
                     readPending = false;
-                    // 创建好客户端的channe后，走这里
                     pipeline.fireChannelRead(readBuf.get(i));
                 }
+
                 readBuf.clear();
                 allocHandle.readComplete();
+
+                // 给服务端Channel传播ChannelReadComplete事件
                 pipeline.fireChannelReadComplete();
 
                 if (exception != null) {

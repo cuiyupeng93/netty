@@ -454,12 +454,15 @@ public final class NioEventLoop extends SingleThreadEventLoop {
         }
     }
 
+    /**
+     * 事件循环
+     */
     @Override
     protected void run() {
         for (;;) {
             try {
                 try {
-                    // 1. 根据选择策略，判断是否应该轮训当前reactor线程上的selector（原则是优先执行任务队列中的任务，所以如果任务队列不为空，就不会执行select操作）
+                    // 1. 根据选择策略，判断是否应该轮训当前reactor线程上的selector（原则是不要阻塞线程，所以优先执行任务队列中的任务，只有任务队列为空，才会执行select操作）
                     // （1）hasTasks()方法：若taskQueue或者tailTasks任务队列中有任务，返回true，否则返回false。
                     // 回顾：在分析NioEventLoop的构造方法时我们已经知道，netty会调用两次newTaskQueue方法，分别创建taskQueue和tailTasks两个任务队列
                     // 前者会传入SingleThreadEventExecutor#taskQueue属性，后者会传入SingleThreadEventLoop#tailTasks属性
@@ -546,8 +549,8 @@ public final class NioEventLoop extends SingleThreadEventLoop {
     }
 
     private void processSelectedKeys() {
+        // 这两个方法的逻辑都差不多
         if (selectedKeys != null) {
-            // 有事件的话会进到这里
             processSelectedKeysOptimized();
         } else {
             // 调用selector.selectedKeys()获取当前就绪的selectionKey集合
@@ -629,9 +632,12 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             // See https://github.com/netty/netty/issues/2363
             selectedKeys.keys[i] = null;
 
+            // 由于我们使用NIO，在Channel注册到selector上时，给selectionKey附加的是当前Channel对象，所以这里获取对象的类型是AbstractNioChannel
+            // 代码位置：AbstractNioChannel.doRegister
             final Object a = k.attachment();
 
             if (a instanceof AbstractNioChannel) {
+                // 走这个分支
                 processSelectedKey(k, (AbstractNioChannel) a);
             } else {
                 @SuppressWarnings("unchecked")
@@ -652,6 +658,8 @@ public final class NioEventLoop extends SingleThreadEventLoop {
 
     private void processSelectedKey(SelectionKey k, AbstractNioChannel ch) {
         final AbstractNioChannel.NioUnsafe unsafe = ch.unsafe();
+
+        // 判断一下这个SelectionKey是否有效，无效则关闭channel
         if (!k.isValid()) {
             final EventLoop eventLoop;
             try {
@@ -672,12 +680,18 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             }
             return;
         }
+        // 走到这里说明Key有效
 
         try {
+            // 获取就绪的事件的ops值
+            // 回顾：readyOps与SelectionKey.OP_CONNECT等常量按位与，结果如果!=0，说明Channel关注了此事件（这是NIO的知识）
             int readyOps = k.readyOps();
+
+            // 处理OP_CONNECT事件（这个是客户端需要关注的事件）
             // We first need to call finishConnect() before try to trigger a read(...) or write(...) as otherwise
             // the NIO JDK channel implementation may throw a NotYetConnectedException.
             if ((readyOps & SelectionKey.OP_CONNECT) != 0) {
+                // 移除对连接事件的关注
                 // remove OP_CONNECT as otherwise Selector.select(..) will always return without blocking
                 // See https://github.com/netty/netty/issues/924
                 int ops = k.interestOps();
@@ -687,16 +701,16 @@ public final class NioEventLoop extends SingleThreadEventLoop {
                 unsafe.finishConnect();
             }
 
-            // Process OP_WRITE first as we may be able to write some queued buffers and so free memory.
+            // 先处理写事件，因为我们可以写出一些排队的缓冲区，从而释放内存
             if ((readyOps & SelectionKey.OP_WRITE) != 0) {
-                // Call forceFlush which will also take care of clear the OP_WRITE once there is nothing left to write
+                // 调用forceFlush，一旦没有任何内容可写，它也会负责清除OP_WRITE
                 ch.unsafe().forceFlush();
             }
 
-            // Also check for readOps of 0 to workaround possible JDK bug which may otherwise lead
-            // to a spin loop
+            // 处理新连接或读事件，还要检查readyOps=0的情况，以解决可能导致自旋循环的JDK错误
             if ((readyOps & (SelectionKey.OP_READ | SelectionKey.OP_ACCEPT)) != 0 || readyOps == 0) {
-                // 连接或读事件
+                // 如果是NioServerSocketChannel，关注的是接收客户端连接事件，下一步会进到：AbstractNioMessageChannel.NioMessageUnsafe.read
+                // 如果是NioSocketChannel，关注的是客户端过来的读事件，下一步会进到：AbstractNioByteChannel.NioByteUnsafe.read
                 unsafe.read();
             }
         } catch (CancelledKeyException ignored) {
