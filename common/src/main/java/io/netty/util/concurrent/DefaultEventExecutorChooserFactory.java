@@ -20,16 +20,12 @@ import io.netty.util.internal.UnstableApi;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Default implementation which uses simple round-robin to choose next {@link EventExecutor}.
- * <p>
- * 实现 EventExecutorChooserFactory 接口，默认 EventExecutorChooser 工厂实现类
+ * EventExecutor选择器的默认工厂类实现
  */
 @UnstableApi
 public final class DefaultEventExecutorChooserFactory implements EventExecutorChooserFactory {
 
-    /**
-     * 单例
-     */
+    // 单例
     public static final DefaultEventExecutorChooserFactory INSTANCE = new DefaultEventExecutorChooserFactory();
 
     private DefaultEventExecutorChooserFactory() {
@@ -38,7 +34,9 @@ public final class DefaultEventExecutorChooserFactory implements EventExecutorCh
     @SuppressWarnings("unchecked")
     @Override
     public EventExecutorChooser newChooser(EventExecutor[] executors) {
-        if (isPowerOfTwo(executors.length)) {// 是否为 2 的幂次方
+        // 判断数组是否为2的幂次方，是则创建一个PowerOfTwoEventExecutorChooser
+        // 否则创建一个GenericEventExecutorChooser
+        if (isPowerOfTwo(executors.length)) {
             return new PowerOfTwoEventExecutorChooser(executors);
         } else {
             return new GenericEventExecutorChooser(executors);

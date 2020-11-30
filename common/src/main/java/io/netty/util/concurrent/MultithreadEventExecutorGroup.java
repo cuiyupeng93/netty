@@ -72,37 +72,34 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
      * @param args              arguments which will passed to each {@link #newChild(Executor, Object...)} call
      */
     protected MultithreadEventExecutorGroup(int nThreads, Executor executor, Object... args) {
+        // 第三个参数是选择器工厂对象
         this(nThreads, executor, DefaultEventExecutorChooserFactory.INSTANCE, args);
     }
 
-    /**
-     * Create a new instance.
-     *
-     * @param nThreads          the number of threads that will be used by this instance.
-     * @param executor          the Executor to use, or {@code null} if the default should be used.
-     * @param chooserFactory    the {@link EventExecutorChooserFactory} to use.
-     * @param args              arguments which will passed to each {@link #newChild(Executor, Object...)} call
-     */
+    // 构造方法
     protected MultithreadEventExecutorGroup(int nThreads, Executor executor,
                                             EventExecutorChooserFactory chooserFactory, Object... args) {
         if (nThreads <= 0) {
             throw new IllegalArgumentException(String.format("nThreads: %d (expected: > 0)", nThreads));
         }
 
-        // 创建线程池 executor，这个线程池是后边给 eventLoop 使用的, eventLoop 第一次提交任务时，会发现还没有绑定线程，所以会绑定到这个线程池创建出来的线程上
-        // 看名字可以发现，这是每个任务都会开启一个线程的线程池。
-        // 由于是从子类调用过来的，所以newDefaultThreadFactory方法会走到子类重写的方法中
+        // 1. 创建线程池 executor
+        // 注：这个线程池是后边给 eventLoop 使用的, eventLoop 第一次提交任务时，会发现还没有绑定线程，所以会绑定到这个线程池创建出来的线程上
         if (executor == null) {
+            // 看名字ThreadPerTaskExecutor可以发现，这是每个任务都会开启一个线程的线程池。
+            // 由于是从子类调用过来的，所以newDefaultThreadFactory方法会走到子类重写的方法中
             executor = new ThreadPerTaskExecutor(newDefaultThreadFactory());
         }
 
-        // 创建事件执行器数组
+        // 2. 创建事件执行器数组children，大小就是传入的nThreads
         children = new EventExecutor[nThreads];
 
+        // 3. 循环创建nThreads个EventLoop对象，填充到children中
         for (int i = 0; i < nThreads; i ++) {
             boolean success = false;// 是否创建成功
             try {
-                // 创建 EventExecutor 对象
+                // 调用newChild方法创建EventExecutor对象
+                // 如果是从NioEventLoopGroup的构造方法调用上来的，这里会调用NioEventLoopGroup#newChild方法
                 children[i] = newChild(executor, args);
                 success = true;
             } catch (Exception e) {
@@ -130,26 +127,27 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
                 }
             }
         }
-        // 创建 EventExecutor 选择器
+        // 4. 创建选择器对象chooser
         chooser = chooserFactory.newChooser(children);
 
-        // 创建监听器，用于 EventExecutor 终止时的监听
+        // 5. 创建监听器，用于监听到EventLoop终止时，进行回调
         final FutureListener<Object> terminationListener = new FutureListener<Object>() {
             @Override
             public void operationComplete(Future<Object> future) throws Exception {
-                // 回调的具体逻辑是，当所有 EventExecutor 都终止完成时，通过调用 Future#setSuccess(V result) 方法，通知监听器们。至于为什么设置的值是 null ，因为监听器们不关注具体的结果。
+                // 回调的具体逻辑是，当所有的EventExecutor全部终止完成时，通过调用 Future#setSuccess(V result) 方法，通知监听器们。
+                // 至于为什么设置的值是 null ，因为监听器们不关注具体的结果。
                 if (terminatedChildren.incrementAndGet() == children.length) {// 全部关闭
                     terminationFuture.setSuccess(null);// 设置结果，并通知监听器们
                 }
             }
         };
 
-        // 设置监听器到每个 EventExecutor 上
+        // 6. 将监听器绑定到每个EventExecutor上
         for (EventExecutor e: children) {
             e.terminationFuture().addListener(terminationListener);
         }
 
-        // 创建不可变( 只读 )的 EventExecutor 数组
+        // 7. 创建一个只读的EventExecutor数组：readonlyChildren
         Set<EventExecutor> childrenSet = new LinkedHashSet<EventExecutor>(children.length);
         Collections.addAll(childrenSet, children);
         readonlyChildren = Collections.unmodifiableSet(childrenSet);

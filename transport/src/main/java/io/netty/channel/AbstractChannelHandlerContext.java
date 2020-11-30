@@ -478,6 +478,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
         return deregister(newPromise());
     }
 
+    // AbstractChannelHandlerContext.bind方法用于将bind事件传播给下一个ChannelOutboundHandler处理
     @Override
     public ChannelFuture bind(final SocketAddress localAddress, final ChannelPromise promise) {
         if (localAddress == null) {
@@ -488,10 +489,12 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
             return promise;
         }
 
-        // 从尾节点开始向前找，找下一个继承ChannelOutboundHandler的类
-        // 由于这里添加的是ChannelInboundHandler，原来的ServerBootstrapAcceptor也是ChannelInboundHandler，所以这里找到的next就是HeadContext
+        // 从尾节点开始向前找，找下一个实现了bind方法的ChannelOutboundHandler类型的ChannelHandlerContext
+        // 这里会找到HeadContext，因为它即实现了ChannelInboundHandler，又实现了ChannelOutboundHandler，所以既能处理入站数据又能处理出站数据
+        // 且HeadContext实现了ChannelOutboundHandler#bind方法
         final AbstractChannelHandlerContext next = findContextOutbound(MASK_BIND);
         EventExecutor executor = next.executor();
+        // 最终调用它的invokeBind方法
         if (executor.inEventLoop()) {
             next.invokeBind(localAddress, promise);
         } else {
@@ -508,6 +511,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
     private void invokeBind(SocketAddress localAddress, ChannelPromise promise) {
         if (invokeHandler()) {
             try {
+                // 这里handler()方法获取的是HeadContext
                 ((ChannelOutboundHandler) handler()).bind(this, localAddress, promise);
             } catch (Throwable t) {
                 notifyOutboundHandlerException(t, promise);

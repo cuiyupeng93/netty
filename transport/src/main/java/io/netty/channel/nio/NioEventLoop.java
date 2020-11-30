@@ -64,8 +64,12 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             SystemPropertyUtil.getBoolean("io.netty.noKeySetOptimization", false);
 
     private static final int MIN_PREMATURE_SELECTOR_RETURNS = 3;
+    // 自动rebuild selector的次数阈值，优先取io.netty.selectorAutoRebuildThreshold配置，默认为512次
+    // 即超过512次轮询，就重新构建一个java selector
     private static final int SELECTOR_AUTO_REBUILD_THRESHOLD;
 
+    // selectNowSupplier提供的get方法，每次都会调用java原生selector的selectNow方法，返回当前就绪的通道的数量
+    // javaSelector的selectNow方法是不会阻塞当前线程的
     private final IntSupplier selectNowSupplier = new IntSupplier() {
         @Override
         public int get() throws Exception {
@@ -132,9 +136,12 @@ public final class NioEventLoop extends SingleThreadEventLoop {
     private int cancelledKeys;
     private boolean needsToSelectAgain;
 
+    // NioEventLoop构造方法
     NioEventLoop(NioEventLoopGroup parent, Executor executor, SelectorProvider selectorProvider,
                  SelectStrategy strategy, RejectedExecutionHandler rejectedExecutionHandler,
                  EventLoopTaskQueueFactory queueFactory) {
+        // 调用父类SingleThreadEventLoop的构造方法
+        // 这里传入了两个任务队列，一个是taskQueue，一个是tailTaskQueue。
         super(parent, executor, false, newTaskQueue(queueFactory), newTaskQueue(queueFactory),
                 rejectedExecutionHandler);
         if (selectorProvider == null) {
@@ -143,6 +150,9 @@ public final class NioEventLoop extends SingleThreadEventLoop {
         if (strategy == null) {
             throw new NullPointerException("selectStrategy");
         }
+        // selectorProvider是一个工具类，它的provider.openSelector();方法用于打开一个Java NIO 原生的Selector对象
+        // openSelector里就是使用provider.openSelector();打开一个Selector对象，并赋值给NioEventLoop#selector属性
+        // unwrappedSelector是JavaNIO原生selector对象，selector是Netty对原生selector的一层封装
         provider = selectorProvider;
         final SelectorTuple selectorTuple = openSelector();
         selector = selectorTuple.selector;
@@ -150,6 +160,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
         selectStrategy = strategy;
     }
 
+    // 创建一个任务队列
     private static Queue<Runnable> newTaskQueue(
             EventLoopTaskQueueFactory queueFactory) {
         if (queueFactory == null) {
@@ -358,8 +369,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
     }
 
     /**
-     * Replaces the current {@link Selector} of this event loop with newly created {@link Selector}s to work
-     * around the infamous epoll 100% CPU bug.
+     * 构建一个新的selector，替换旧的selector，以此解决著名的epoll 100% CPU bug
      */
     public void rebuildSelector() {
         if (!inEventLoop()) {
@@ -379,7 +389,9 @@ public final class NioEventLoop extends SingleThreadEventLoop {
         return selector.keys().size() - cancelledKeys;
     }
 
+    // 重新构建一个selector，替换旧的selector
     private void rebuildSelector0() {
+        // 旧的selector
         final Selector oldSelector = selector;
         final SelectorTuple newSelectorTuple;
 
@@ -388,13 +400,14 @@ public final class NioEventLoop extends SingleThreadEventLoop {
         }
 
         try {
+            // 重新打开一个selector
             newSelectorTuple = openSelector();
         } catch (Exception e) {
             logger.warn("Failed to create a new Selector.", e);
             return;
         }
 
-        // Register all channels to the new Selector.
+        // 把旧selector上的channels都转移到新的selector上
         int nChannels = 0;
         for (SelectionKey key: oldSelector.keys()) {
             Object a = key.attachment();
@@ -446,8 +459,13 @@ public final class NioEventLoop extends SingleThreadEventLoop {
         for (;;) {
             try {
                 try {
-                    // hasTasks()  若taskQueue or  tailTasks任务队列中有任务  返回false  没有则返回true
-                    // 有任务返回selectNow的返回值   没任务返回-1
+                    // 1. 根据选择策略，判断是否应该轮训当前reactor线程上的selector（原则是优先执行任务队列中的任务，所以如果任务队列不为空，就不会执行select操作）
+                    // （1）hasTasks()方法：若taskQueue或者tailTasks任务队列中有任务，返回true，否则返回false。
+                    // 回顾：在分析NioEventLoop的构造方法时我们已经知道，netty会调用两次newTaskQueue方法，分别创建taskQueue和tailTasks两个任务队列
+                    // 前者会传入SingleThreadEventExecutor#taskQueue属性，后者会传入SingleThreadEventLoop#tailTasks属性
+                    // （2）selectNowSupplier：提供了一个get方法，可以获取javaSelector#selectNow方法的返回值（非阻塞），也就是当前就绪的通道的数量
+                    // （3）calculateStrategy方法：通过对NioEventLoop实例化过程的学习，我们知道这里的selectStrategy是DefaultSelectStrategy类型的
+                    // 它的选择策略是：如果任务队列中有任务，返回当前就绪的Channel的数量（那么会进入到下边的default分支），否则返回-1（进入到SelectStrategy.SELECT分支）
                     switch (selectStrategy.calculateStrategy(selectNowSupplier, hasTasks())) {
                     case SelectStrategy.CONTINUE:
                         continue;
@@ -477,12 +495,14 @@ public final class NioEventLoop extends SingleThreadEventLoop {
                 needsToSelectAgain = false;
                 // ioRatio表示事件循环中用于I/O任务的时间比例，默认值是50，所以这里会走到else分支
                 final int ioRatio = this.ioRatio;
+
+                // 2. 处理就绪的IO时间，处理任务队列
                 if (ioRatio == 100) {
                     try {
                         // 处理就绪的IO事件
                         processSelectedKeys();
                     } finally {
-                        // 处理任务队列
+                        // 处理任务队列（放在finally里确保始终会执行任务队列里的任务）
                         runAllTasks();
                     }
                 } else {
@@ -491,8 +511,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
                         // 处理就绪的IO事件
                         processSelectedKeys();
                     } finally {
-                        // 处理任务队列
-                        // Ensure we always run tasks.
+                        // 处理任务队列（放在finally里确保始终会执行任务队列里的任务）
                         final long ioTime = System.nanoTime() - ioStartTime;
                         runAllTasks(ioTime * (100 - ioRatio) / ioRatio);
                     }
@@ -531,6 +550,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             // 有事件的话会进到这里
             processSelectedKeysOptimized();
         } else {
+            // 调用selector.selectedKeys()获取当前就绪的selectionKey集合
             processSelectedKeysPlain(selector.selectedKeys());
         }
     }
@@ -772,8 +792,12 @@ public final class NioEventLoop extends SingleThreadEventLoop {
     private void select(boolean oldWakenUp) throws IOException {
         Selector selector = this.selector;
         try {
+            // selectCnt表示轮询次数，每次轮询+1
             int selectCnt = 0;
             long currentTimeNanos = System.nanoTime();
+            // selectDeadLineNanos是select操作的截止时间，它是当前时间+距离下次定时任务执行还剩余的时间的和
+            // 若定时任务队列不为空，delayNanos方法返回距离当前任务执行还有多长时间
+            // 若定时任务队列为空，返回默认的1秒
             long selectDeadLineNanos = currentTimeNanos + delayNanos(currentTimeNanos);
 
             long normalizedDeadlineNanos = selectDeadLineNanos - initialNanoTime();
@@ -782,8 +806,13 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             }
 
             for (;;) {
+                // 1. 定时任务截止时间快到了，中断本次轮询
+                // timeoutMillis表示距截止时间的剩余时间。这个计算的结果越小，说明截止时间快到了
+                // 1毫秒=1000微妙，1微妙=1000纳秒，1000000L表示1毫秒，500000L表示0.5毫秒
                 long timeoutMillis = (selectDeadLineNanos - currentTimeNanos + 500000L) / 1000000L;
+                // 当前的定时任务队列中有任务的截止事件快到了(<=0.5ms)，就跳出循环。
                 if (timeoutMillis <= 0) {
+                    // 结束轮询前，如果发现一次轮询都没有，就轮询一次
                     if (selectCnt == 0) {
                         selector.selectNow();
                         selectCnt = 1;
@@ -791,26 +820,27 @@ public final class NioEventLoop extends SingleThreadEventLoop {
                     break;
                 }
 
-                // If a task was submitted when wakenUp value was true, the task didn't get a chance to call
-                // Selector#wakeup. So we need to check task queue again before executing select operation.
-                // If we don't, the task might be pended until select operation was timed out.
-                // It might be pended until idle timeout if IdleStateHandler existed in pipeline.
+                // 2. 如果轮询过程中，发现有任务加入，就中断本次轮询
+                // Netty为了保证任务队列能及时执行，在进行阻塞select操作前，会判断任务队列是否为空，如果不为空，就执行一次非阻塞的selectNow操作，然后中断循环
                 if (hasTasks() && wakenUp.compareAndSet(false, true)) {
                     selector.selectNow();
                     selectCnt = 1;
                     break;
                 }
 
+                // 3. 进行一次阻塞的select操作，并设置超时时间，selectedKeys是本次轮询到的就绪的Channel的数量
+                // 执行到这一步，说明任务队列为空，并且所有定时任务的延时时间还未到（大于0.5毫秒）
+                // 于是，在这里进行一次阻塞select操作，截止到第一个定时任务的截止时间
                 int selectedKeys = selector.select(timeoutMillis);
-                selectCnt ++;
+                selectCnt ++;// 轮询次数+1
 
+
+                // 4. 如果轮询到IO事件就绪，或者oldWakenUp=true，或者用户主动唤醒，或者任务队列不为空，或者第一个定时任务即将要被执行，中断轮询
                 if (selectedKeys != 0 || oldWakenUp || wakenUp.get() || hasTasks() || hasScheduledTasks()) {
-                    // - Selected something,
-                    // - waken up by user, or
-                    // - the task queue has a pending task.
-                    // - a scheduled task is ready for processing
                     break;
                 }
+
+                // 5. 当前线程被中断了，结束本次轮询
                 if (Thread.interrupted()) {
                     // Thread was interrupted so reset selected keys and break so we not run into a busy loop.
                     // As this is most likely a bug in the handler of the user or it's client library we will
@@ -827,13 +857,15 @@ public final class NioEventLoop extends SingleThreadEventLoop {
                 }
 
                 long time = System.nanoTime();
+                // 如果 现在的时间-select阻塞的时间>=运行之前的时间
                 if (time - TimeUnit.MILLISECONDS.toNanos(timeoutMillis) >= currentTimeNanos) {
                     // timeoutMillis elapsed without anything selected.
                     selectCnt = 1;
                 } else if (SELECTOR_AUTO_REBUILD_THRESHOLD > 0 &&
                         selectCnt >= SELECTOR_AUTO_REBUILD_THRESHOLD) {
-                    // The code exists in an extra method to ensure the method is not too big to inline as this
-                    // branch is not very likely to get hit very frequently.
+                    // 6. 如果轮询的时间消耗是0，且轮询次数大于阈值（默认是512次），就重新构建一个selector对象替换旧的selector
+                    // （内部会将旧selector上注册的channels都转移到新的selector上）然后结束本次轮询
+                    // 这解决了epoll CPU 100%的BUG
                     selector = selectRebuildSelector(selectCnt);
                     selectCnt = 1;
                     break;

@@ -277,6 +277,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
         final ChannelFuture regFuture = initAndRegister();
         final Channel channel = regFuture.channel();
         if (regFuture.cause() != null) {
+            // 如果cause能获取到值，说明注册流程失败了
             return regFuture;
         }
 
@@ -313,7 +314,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     }
 
     /**
-     * 初始化Channel流程 ★★★
+     * 初始化Channel流程
      */
     final ChannelFuture initAndRegister() {
         Channel channel = null;
@@ -336,10 +337,11 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
             return new DefaultChannelPromise(new FailedChannel(), GlobalEventExecutor.INSTANCE).setFailure(t);
         }
 
-        // 3. Channel注册到EventLoopGroup中的一个eventLoop上（其实是将eventLoop绑定到这个Channel上）
-        // 这一步是异步操作，所以返回一个ChannelFuture
+        // 3. Channel注册到EventLoopGroup中的一个eventLoop上（其实是将eventLoop的引用赋值到这个AbstractChannel#eventLoop上）
+        // 这一步是异步操作，返回一个ChannelFuture
         ChannelFuture regFuture = config().group().register(channel);
         if (regFuture.cause() != null) {
+            // cause不为null，说明注册失败了
             if (channel.isRegistered()) {
                 // 若发生异常，并且Channel已经注册成功，则正常关闭Channel
                 channel.close();
@@ -368,7 +370,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
             @Override
             public void run() {
                 if (regFuture.isSuccess()) {
-                    // 绑定本地端口
+                    // 绑定本地端口，并添加一个CLOSE_ON_FAILURE监听器
                     channel.bind(localAddress, promise).addListener(ChannelFutureListener.CLOSE_ON_FAILURE);
                 } else {
                     // 如果初始化channel失败，这里直接设为失败

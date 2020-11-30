@@ -1014,6 +1014,8 @@ public class DefaultChannelPipeline implements ChannelPipeline {
 
     @Override
     public final ChannelFuture bind(SocketAddress localAddress, ChannelPromise promise) {
+        // 调用了tail的bind方法
+        // 由于TailContext继承AbstractChannelHandlerContext，但是没有实现其bind方法，所以这里调用的是父类AbstractChannelHandlerContext#bind方法
         return tail.bind(localAddress, promise);
     }
 
@@ -1379,6 +1381,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         @Override
         public void bind(
                 ChannelHandlerContext ctx, SocketAddress localAddress, ChannelPromise promise) {
+            // 最终会调用AbstractChannel.AbstractUnsafe#bind方法
             unsafe.bind(localAddress, promise);
         }
 

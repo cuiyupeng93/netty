@@ -518,10 +518,12 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 neverRegistered = false;
                 registered = true;
 
-                // 2. 调用HandlerAdd事件
-                // 这里内部会调用我们自己实现的ChannelInitializer#initChannel方法，用来给channel#pipeline进行初始化
-                // 初始化完后，会将ChannelInitializer从pipeline中移除
-                // 比如：如果是服务端channel进到了register0方法，就会调用在ServerBootstrap.init方法里，添加ServerBootstrapAcceptor的逻辑
+                // 到这一步Channel才算真正完成注册，以下操作都是触发Channel注册完成后的一些事件
+
+                // 2. 回调所有的handlerAdd方法
+                // 这一步内部会回调此pipeline上的所有ChannelHandler的handlerAdded方法和handlerRemoved方法，
+                // 同时ChannelInitializer#initChannel方法也会被回调
+                // 注：这一步其实是循环将pipeline的pendingHandlerCallbackHead上的任务全部执行一遍，pendingHandlerCallbackHead上的任务就是handlerAdded或者handlerRemoved
                 pipeline.invokeHandlerAddedIfNeeded();
 
                 // 代码有点多，先回顾一下：
@@ -533,7 +535,8 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 // （2）通知此promise上的所有监听器，回调它们的operationComplete方法
                 safeSetSuccess(promise);
 
-                // 4. 此时channel已注册到EventLoop上，可以回调此channel的pipeline上的所有实现了channelRegistered方法的handler了
+                // 4. 回调所有的channelRegistered方法
+                // 由于是调用的pipeline的fire方法，所以事件会从head节点开始传播至tail节点。也就是所有实现了channelRegistered方法的handler都会被回调
                 pipeline.fireChannelRegistered();
                 // Only fire a channelActive if the channel has never been registered. This prevents firing
                 // multiple channel actives if the channel is deregistered and re-registered.
@@ -585,8 +588,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 return;
             }
 
-            // todo qa 2020-11-14 这一步暂时不理解，暂不做分析
-            // 2. fireChannelActive
+            // 2. 从pipeline的头节点开始传播ChannelActive事件
             if (!wasActive && isActive()) {
                 invokeLater(new Runnable() {
                     @Override

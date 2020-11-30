@@ -18,7 +18,7 @@ package io.netty.channel;
 import io.netty.util.IntSupplier;
 
 /**
- * Default select strategy.
+ * 默认的选择策略实现类
  */
 final class DefaultSelectStrategy implements SelectStrategy {
     static final SelectStrategy INSTANCE = new DefaultSelectStrategy();
@@ -27,6 +27,7 @@ final class DefaultSelectStrategy implements SelectStrategy {
 
     @Override
     public int calculateStrategy(IntSupplier selectSupplier, boolean hasTasks) throws Exception {
+        // 如果任务队列中有任务，返回当前就绪的Channel的数量，否则返回-1
         return hasTasks ? selectSupplier.get() : SelectStrategy.SELECT;
     }
 }

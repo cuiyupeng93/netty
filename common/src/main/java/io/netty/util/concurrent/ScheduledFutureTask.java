@@ -122,7 +122,9 @@ final class ScheduledFutureTask<V> extends PromiseTask<V> implements ScheduledFu
         return deadlineNanos == 0L ? 0L : Math.max(0L, deadlineNanos - nanoTime());
     }
 
+    // 返回距离当前任务执行还有多长时间
     public long delayNanos(long currentTimeNanos) {
+        // 计算逻辑：据当前任务执行还剩的时间-(传进来的当前时间-当前任务的创建时间)
         return deadlineNanos == 0L ? 0L
                 : Math.max(0L, deadlineNanos() - (currentTimeNanos - START_TIME));
     }

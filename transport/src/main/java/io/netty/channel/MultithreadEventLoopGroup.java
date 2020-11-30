@@ -37,13 +37,11 @@ public abstract class MultithreadEventLoopGroup extends MultithreadEventExecutor
 
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(MultithreadEventLoopGroup.class);
 
-    /**
-     * 默认 EventLoop 线程数
-     */
+    // EventLoopGroup的默认线程数
     private static final int DEFAULT_EVENT_LOOP_THREADS;
 
     static {
-        // 优先取 io.netty.eventLoopThreads 配置的线程数，否则使用 CPU 数 * 2
+        // 优先取 io.netty.eventLoopThreads 配置的线程数，否则使用 CPU 核数 * 2
         DEFAULT_EVENT_LOOP_THREADS = Math.max(1, SystemPropertyUtil.getInt(
                 "io.netty.eventLoopThreads", NettyRuntime.availableProcessors() * 2));
 
@@ -58,6 +56,8 @@ public abstract class MultithreadEventLoopGroup extends MultithreadEventExecutor
      * @see MultithreadEventExecutorGroup#MultithreadEventExecutorGroup(int, Executor, Object...)
      */
     protected MultithreadEventLoopGroup(int nThreads, Executor executor, Object... args) {
+        // 当没有传入nThreads或者传入0时，会取当前CPU核数*2作为默认值
+        // 下一步调用父类MultithreadEventExecutorGroup的构造方法
         super(nThreads == 0 ? DEFAULT_EVENT_LOOP_THREADS : nThreads, executor, args);
     }
 
@@ -114,7 +114,9 @@ public abstract class MultithreadEventLoopGroup extends MultithreadEventExecutor
 
     @Override
     public ChannelFuture register(Channel channel) {
-        // 先通过next()方法获取一个EventLoop，再把传入的channel注册到这个eventLoop上
+        // next()方法是调用的EventExecutorChooser的next方法，从EventLoopGroup的children数组中获取一个EventLoop
+        // 再把传入的channel注册到这个eventLoop上
+        // 下一步调用的是 SingleThreadEventLoop.register方法
         return next().register(channel);
     }
 
