@@ -162,6 +162,8 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
         try {
             if (ch != null) {
                 // 将ch封装成netty的NioSocketChannel，parent 就是 服务端的NioServerSocketChannel
+                // 这一步涉及到了NioSocketChannel的实例化，它与NioServerSocketChannel的实例化过程差不多，
+                // 主要的一点区别是，NioSocketChannel关注的是OP_READ事件
                 buf.add(new NioSocketChannel(this, ch));
                 return 1;
             }

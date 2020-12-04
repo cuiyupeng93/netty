@@ -23,13 +23,11 @@ import io.netty.util.internal.UnstableApi;
 import static io.netty.util.internal.ObjectUtil.checkNotNull;
 
 /**
- * Allocates a new receive buffer whose capacity is probably large enough to read all inbound data and small enough
- * not to waste its space.
+ * 分配一个新的缓冲区，其容量足以读取所有入站数据，且足够小不会浪费空间
  */
 public interface RecvByteBufAllocator {
     /**
-     * Creates a new handle.  The handle provides the actual operations and keeps the internal information which is
-     * required for predicting an optimal buffer capacity.
+     * 创建一个新的handle，提供实际操作，并且保存预测最佳缓冲容量所需的内部信息
      */
     Handle newHandle();
 
@@ -39,8 +37,7 @@ public interface RecvByteBufAllocator {
     @Deprecated
     interface Handle {
         /**
-         * Creates a new receive buffer whose capacity is probably large enough to read all inbound data and small
-         * enough not to waste its space.
+         * 分配一个新的缓冲区，其容量足以读取所有入站数据，且足够小不会浪费空间
          */
         ByteBuf allocate(ByteBufAllocator alloc);
 
@@ -51,10 +48,9 @@ public interface RecvByteBufAllocator {
         int guess();
 
         /**
-         * Reset any counters that have accumulated and recommend how many messages/bytes should be read for the next
-         * read loop.
+         * 重置已累积的所有计数器，并建议下一个读取循环应读取多少消息/字节。
          * <p>
-         * This may be used by {@link #continueReading()} to determine if the read operation should complete.
+         * 这个方法可能被continueReading()方法使用，用以确定是否应该完成读取操作
          * </p>
          * This is only ever a hint and may be ignored by the implementation.
          * @param config The channel configuration which may impact this object's behavior.

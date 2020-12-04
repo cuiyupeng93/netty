@@ -428,8 +428,13 @@ public abstract class AbstractNioChannel extends AbstractChannel {
 
         readPending = true;
 
+        // 刚注册的Channel，selectionKey的interestOps是0，因为还没有设置关注的事件，所以此时按位与操作结果为0
         final int interestOps = selectionKey.interestOps();
+        // readInterestOp 是当前Channel创建时预设的值，
+        // 对于NioServerSocketChannel来说是SelectionKey.OP_ACCEPT
+        // 对于NioSocketChannel来说是SelectionKey.OP_READ
         if ((interestOps & readInterestOp) == 0) {
+            // 设置感兴趣的事件
             selectionKey.interestOps(interestOps | readInterestOp);
         }
     }

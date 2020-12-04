@@ -217,10 +217,10 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
             // child 代表客户端channel
             final Channel child = (Channel) msg;
 
-            // 将设置的 childHandler 添加到 客户端的pipeline
+            // 将ServerBootstrap中设置的 childHandler 添加到客户端的pipeline
             child.pipeline().addLast(childHandler);
 
-            // options、attrs 也加进去
+            // 将ServerBootstrap中设置的 options、attrs 设置到客户端Channel
             setChannelOptions(child, childOptions, logger);
             setAttributes(child, childAttrs);
 
@@ -234,6 +234,7 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
                         }
                     }
                 });
+                // 到此，就完成了服务端接收客户端连接的过程
             } catch (Throwable t) {
                 forceClose(child, t);
             }

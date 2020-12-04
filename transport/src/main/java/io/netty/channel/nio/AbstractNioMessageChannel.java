@@ -56,15 +56,19 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
         super.doBeginRead();
     }
 
+    // NioMessageUnsafe是服务端Channel使用的unsafe对象
     @SuppressWarnings("Duplicates")
     private final class NioMessageUnsafe extends AbstractNioUnsafe {
 
+        // readBuf里保存的是新加入的客户端Channel，如果是NIO，则是NioSocketChannel对象
         private final List<Object> readBuf = new ArrayList<Object>();
 
         @Override
         public void read() {
+            // 断言当前eventLoop是启动的
             assert eventLoop().inEventLoop();
             final ChannelConfig config = config();
+            // 这里获取的是服务端的pipeline
             final ChannelPipeline pipeline = pipeline();
             final RecvByteBufAllocator.Handle allocHandle = unsafe().recvBufAllocHandle();
             allocHandle.reset(config);
@@ -74,8 +78,10 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
             try {
                 try {
                     do {
-                        // 在doReadMessages方法里接收客户端的连接，将获取到代表客户端的对象放入readBuf里
-                        // 如果使用NIO，readBuf里放入的就是NioSocketChannel对象
+                        // 1. 在doReadMessages方法里接收客户端的连接
+                        // 将获取到代表客户端的对象放入readBuf里
+                        // 如果使用NIO，这里会调用NioServerSocketChannel重写的doReadMessages方法，readBuf里放入的就是NioSocketChannel对象
+                        // localRead=1表示接受一个客户端连接成功
                         int localRead = doReadMessages(readBuf);
                         if (localRead == 0) {
                             break;
@@ -91,24 +97,28 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
                     exception = t;
                 }
 
-                // 遍历新接入的客户端Channel集合，逐个给服务端Channel传播ChannelRead事件，msg就是新创建的客户端Channel对象
-                // 如果是NIO，则这里就是NioSocketChannel对象
+                // 2. 遍历新接入的客户端Channel集合，逐个给服务端Channel传播ChannelRead事件，msg就是新创建的客户端Channel对象
                 // 注意：这里是在服务端pipeline中传播ChannelRead事件
+                // 这一步的作用：服务端Channel在初始化时，会被加入一个ServerBootstrapAcceptor（在ServerBootstrap.init方法里），
+                // 这一步就是为了回调ServerBootstrapAcceptor#channelRead方法，在这个方法里会初始化客户端Channel的配置、pipeline，
+                // 并将客户端Channel注册到childGroup的一个eventLoop上（内部逻辑会启动工作线程的事件循环）
                 int size = readBuf.size();
                 for (int i = 0; i < size; i ++) {
                     readPending = false;
+                    // 给服务端传播ChannelRead事件，用以回调ServerBootstrapAcceptor#channelRead方法，初始化客户端Channel
                     pipeline.fireChannelRead(readBuf.get(i));
                 }
 
                 readBuf.clear();
                 allocHandle.readComplete();
 
-                // 给服务端Channel传播ChannelReadComplete事件
+                // 3. 给服务端Channel传播ChannelReadComplete事件
                 pipeline.fireChannelReadComplete();
 
                 if (exception != null) {
                     closed = closeOnReadError(exception);
 
+                    // 传播doReadMessages过程中可能出现的异常
                     pipeline.fireExceptionCaught(exception);
                 }
 

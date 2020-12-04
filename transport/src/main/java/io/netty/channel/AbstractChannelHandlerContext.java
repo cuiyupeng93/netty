@@ -676,9 +676,12 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
 
     @Override
     public ChannelHandlerContext read() {
+        // 从tail向head方向，找出下一个实现了read方法的节点，此时会找到HeadContext
+        // （当然如果自定义的ChannelOutboundHandler也实现了read方法会先被调用）
         final AbstractChannelHandlerContext next = findContextOutbound(MASK_READ);
         EventExecutor executor = next.executor();
         if (executor.inEventLoop()) {
+            // 调用HeadContext的invokeRead方法
             next.invokeRead();
         } else {
             Tasks tasks = next.invokeTasks;

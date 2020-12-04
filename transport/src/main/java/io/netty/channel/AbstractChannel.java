@@ -81,9 +81,12 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
      *        the parent of this channel. {@code null} if there's no parent.
      */
     protected AbstractChannel(Channel parent) {
+        // parent就是创建出客户端Channel的服务端NioServerSocketChannel对象
         this.parent = parent;
         id = newId();
+        // 创建客户端Channel使用的unsafe对象
         unsafe = newUnsafe();
+        // 创建一个NioSocketCahnnel对应的pipeline
         pipeline = newChannelPipeline();
     }
 
@@ -513,7 +516,8 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                     return;
                 }
                 boolean firstRegistration = neverRegistered;
-                // 1. 将javaChannel注册到Selector上（此时暂时没有设置其关注的事件，只是注册）
+                // 1. 将javaChannel注册到Selector上（此时暂时没有设置关注的事件，只是注册）
+                // 设置关注的事件是在fireChannelActive中
                 doRegister();
                 neverRegistered = false;
                 registered = true;
@@ -542,7 +546,14 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 // multiple channel actives if the channel is deregistered and re-registered.
                 if (isActive()) {
                     if (firstRegistration) {
-                        // 此时Channel已活跃，回调此channel的pipeline上的所有实现了channelActive方法的handler
+                        // 如果是首次注册，从pipeline的头节点开始传播ChannelActive事件
+                        // 这一步里首先会被调用的就是HeadContext.channelActive方法, 在其内部逻辑里完成了设置关注的事件，调用链如下：
+                        // -> HeadContext.channelActive
+                        // -> 内部调用pipeline的read方法，开始从tail向head传播read方法
+                        // -> 最后调用HeadContext的read方法
+                        // -> AbstractChannel.AbstractUnsafe#beginRead
+                        // -> AbstractNioChannel#doBeginRead
+                        // -> 最后将channel中的readInterestOp设置到SelectionKey的interestOps中
                         pipeline.fireChannelActive();
                     } else if (config().isAutoRead()) {
                         beginRead();
@@ -869,6 +880,8 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
 
         @Override
         public final void beginRead() {
+            // 先检查一下channel是否已经注册，对应的eventLoop是否已经启动，
+            // 正常走到这里的肯定是满足的
             assertEventLoop();
 
             if (!isActive()) {
@@ -876,6 +889,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
             }
 
             try {
+                // 最终设置关注事件的方法，服务端和客户端通用
                 doBeginRead();
             } catch (final Exception e) {
                 invokeLater(new Runnable() {
