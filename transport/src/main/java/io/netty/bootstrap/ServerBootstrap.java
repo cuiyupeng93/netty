@@ -226,6 +226,8 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
 
             try {
                 // 将客户端channel注册到childGroup中的一个eventLoop上
+                // 接下来的调用注册逻辑和服务端Channel注册走相同的代码
+                // 下一步调用 MultithreadEventLoopGroup.register
                 childGroup.register(child).addListener(new ChannelFutureListener() {
                     @Override
                     public void operationComplete(ChannelFuture future) throws Exception {
